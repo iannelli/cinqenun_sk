@@ -1,0 +1,402 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body.wait-cursor, body.wait-cursor * {
+    cursor: wait !important;
+}
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Inter Variable', sans-serif;
+}
+/* Fieldset & Légende ═══════════════════════════════════════════════════════════ */
+.sg-fieldset {
+    border: 1px solid #78a7db;
+    border-radius: 4px;
+    padding: 14px 16px 12px;
+    margin: 0;
+    background: #fff;
+}
+.sg-legende {
+    font-size: 12px;
+    font-weight: bold;
+    color: #78a7db;
+    padding: 0 6px;
+}
+/* LIGNES DE CHAMPS ═══════════════════════════════════════════════════════════ */
+.sg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.sg-row-checkbox {
+    align-items: center;
+    font-size: 12px;
+    gap: 6px;
+}
+/* CHAMP : conteneur (input + label flottant) ═════════════════════════════ */
+.sg-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.sg-w-full { width: 100%; }
+.sg-center { text-align: center; }
+/* ─── Input ───────────────────────────────────────────────── */
+.sg-input {
+    width: 100%;
+    height: 32px;
+    padding: 4px 10px;
+    border: 1.5px solid #b1b1af;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #111111b6;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+.sg-input:focus {
+    border-color: #e9e9e9;
+    box-shadow: 0 0 0 2px rgba(123, 59, 46, 0.15);
+}
+/* ─── Select ───────────────────────────────────────────────── */
+.sg-select {
+    border: 1px solid #b9b9b9;
+    border-radius: 4px;
+    padding: 4px 10px;
+    background-color: white;
+    color: #475569;
+    font-size: 13px;
+    height: 32px;
+    cursor: pointer;
+    outline: none;
+}
+.sg-select:focus { border-color: #6AA5E6; }
+
+/* ─── Label flottant ──────────────────────────────────────── */
+.sg-label {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    padding: 0 4px;
+    font-size: 12px;
+    color: #999;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+/*  Monte au-dessus du bord quand focus OU valeur saisie  */
+.sg-input:focus + .sg-label,
+.sg-input:not(:placeholder-shown) + .sg-label {
+    top: -1px;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #b9b8b7;
+    background: #fff;
+}
+/* ASTÉRISQUE CHAMP OBLIGATOIRE ═══════════════════════════ */
+.sg-asterix {
+    color: #c0392b;
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 12px;
+    margin-right: -5px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+/* MODAL DIALOG ═══════════════════════════════════════════════════════════ */
+dialog.sg-divDialog {
+    position: relative;
+}
+dialog.sg-divDialog .sg-dialogFermer {
+    position: absolute !important;
+    top: -12px !important;
+    right: -12px !important;
+    left: auto !important;
+}
+.sg-divDialog {
+    border: none;
+    padding: 10px;
+    background-color: white;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+    border-radius: 8px;
+    margin: 30px auto 0;
+    width: max-content;
+    min-width: 300px;
+    max-width: 90vw;
+    position: relative;
+    overflow: visible;
+    position: relative;
+}
+.sg-divDialog::backdrop {/* Style du backdrop (le fond derrière la modale quand elle est ouverte via showModal()) */
+   /*background-color: rgba(0, 0, 0, 0);*/
+   background-color: rgba(24, 19, 19, 0.3); /* gris très léger */
+}
+.sg-dialogFooter {
+    display: flex;
+    justify-content: center; /* Centre horizontalement */
+    gap: 15px;              /* Espace entre les deux boutons */
+    padding-top: 15px;
+    width: 100%;
+}
+/* 3 – Bouton sg-dialogFermer en sur-impression */
+.sg-dialogFermer {
+    position: absolute;
+    top: -12px;    /* Ajusté pour chevaucher le bord haut */
+    right: -12px;  /* Ajusté pour chevaucher le bord droit */
+    background-color: white;
+    padding: 4px;
+    border: 1px solid #ddd; /* Optionnel : pour mieux voir le bouton sur fond blanc */
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0);
+}
+.sg-dialogFermer img {
+    width: 20px; /* Taille de votre icône */
+    height: 20px;
+}
+.sg-dialogFermer:hover {
+    width: 35px;
+    height: 35px;
+}
+
+/* BOUTON ENREGISTRER ═══════════════════════════════════════════════════════════ */
+.form-footer {
+    grid-column: 1 / -1;
+    text-align: center;
+    margin-top: 6px;
+}
+.sg-button {
+    background: #f5f5f5;
+    border: 1px solid #999;
+    border-radius: 4px;
+    padding: 3px 13px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: #313131;
+    background-color: #ddd;
+    background-image: -webkit-gradient(linear, left top, left bottom, from(rgba(255,255,255,1)), to(rgba(255,255,255,0)));
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 2px 2px -1px rgba(0, 0, 0, .5), 0 1px 0 rgba(255, 255, 255, .3) inset;
+    text-shadow: 0 1px 0 rgba(255,255,255, .9);
+}
+.sg-button:hover:not(:disabled) {
+    background: #e8e8e8;
+    border-color: #777;
+}
+.sg-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* BOUTON HYPER-TEXTE ═══════════════════════════════════════════════════════════ */
+.sg-link {
+    background: none;
+    border: none;
+    color: blue;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+    font-size: 14px;
+    margin-bottom: -30px;
+}
+.sg-link:hover {/* Survol */
+    color: red;
+}
+.sg-link:active {/* Clic au maintient du bouton */
+    color: red;
+}
+/* TABLES ═══════════════════════════════════════════════════════════ */
+.sg-myTable {
+    width: 100%;
+    position: relative;
+}
+.sg-myTable th {
+    background-color: #c9d8ee;
+    position: sticky;
+    top: 0;
+}
+.sg-myTable tr:nth-child(odd) td:not(:last-child) {
+    background-color: #f9f9fa;
+}
+.sg-myTable th, td {
+    border: 0.5px solid #DCDCE4;
+    height: 35px;
+    font-family: sans-serif;
+    font-size: 14px;
+}
+/* ── Styles appliqués sur chaque Ligne de la Table ── */
+.sg-trSha--clickable {
+    cursor: help;
+    position: relative;
+}
+.sg-trSha:hover {
+    cursor: default;
+    background-color: #eef2ff;
+    box-shadow: 0 0 11px rgba(33,33,33,.2);
+}
+.sg-trSha--clickable::after {
+    content: "Cliquer pour Afficher la Liste des Factures de cette Affaire";
+    position: absolute;
+    /*bottom: 100%;*/
+    left: 60%;
+    transform: translateX(-50%);
+    border: 0.5px solid #7d7d80;
+    background: white;
+    color: #726f6f;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 0.75rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 10;
+}
+.sg-trSha--clickable:hover {
+    background-color: #f0f7ff;
+}
+.sg-trSha--clickable:hover::after {
+    opacity: 1;
+}
+.sg-trSha--clickable:has(td.sg-tdBtn:hover)::after {
+    opacity: 0;
+}
+.sg-myTable tr td {
+    padding-left: 5px;
+    text-align: center;
+}
+.sg-btn {
+    border: none;
+    background-color: white;
+    cursor: pointer;
+    opacity: 0.3;
+}
+.sg-btn:hover {
+    opacity: 1;
+    display: inblock;
+}
+.sg-btn img {
+    width: 15px;
+    height: 15px;
+    margin-left: 10px;
+}
+
+.sg-myInput {
+    background-image: url("/search.png");
+    background-size: 15px;
+    opacity: 0.7;
+    background-position: 10px 5px;
+    background-repeat: no-repeat;
+    width: 300px;
+    font-size: 15px;
+    padding: 12px 20px 12px 40px;
+    border: 1px solid #ddd;
+    float: left;
+    height: 15px;
+}
+
+/* ── Styles appliqués sur chaque Ligne de la Table Comme GMAIL ── */
+/* Cellule fantôme : présente dans le DOM mais sans largeur */
+.sg-thOverlay,
+.sg-tdOverlay {
+    width: 0;
+    padding: 0;
+    border: none;
+    white-space: nowrap;
+}
+.sg-thOverlay {
+    max-width: 0;
+    overflow: hidden;
+    border: none !important;
+    visibility: hidden;
+}
+.sg-tdOverlay {
+    overflow: visible;
+    position: relative;
+}
+/* Conteneur des boutons — caché par défaut */
+.sg-rowActions {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translate(-45vw, -50%); /* Valable pour la liste des Factures */
+    height: 35px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px 0 40px;
+    background: linear-gradient(to right, transparent, #eef2ff 40%);
+    pointer-events: auto;
+    z-index: 1;
+}
+.sg-rowActions--affaires {
+    transform: translate(-40vw, -50%);  /* Valable pour la liste des Affaires */
+}
+.sg-rowActions--clients {
+    transform: translate(-50vw, -50%);  /* Valable pour la liste des Clients */
+}
+/* Déclenchement au survol de la ligne */
+.sg-trSha:hover .sg-rowActions {
+    display: flex;
+}
+
+/* Boutons dans l'overlay Gmail-style */
+.sg-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    opacity: 0.55;
+    transition: opacity 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+}
+.sg-btn:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.08);
+}
+.sg-btn img {
+    width: 16px;
+    height: 16px;
+}
+/* ─── Tooltip custom (remplace title natif) ─────────────────── */
+.sg-btn {
+    position: relative;
+}
+.sg-btn::after {
+    content:          attr(data-tooltip);
+    position:         absolute;
+    bottom:           calc(100% + 6px);
+    left:             50%;
+    transform:        translateX(-50%);
+    background:       #1e293b;
+    color:            white;
+    font-size:        11px;
+    white-space:      nowrap;
+    padding:          4px 8px;
+    border-radius:    4px;
+    pointer-events:   none;
+    opacity:          0;
+    transition:       opacity 0.15s;
+    z-index:          100;
+}
+.sg-btn:hover::after {
+    opacity: 1;
+}

@@ -1,0 +1,261 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Abonne {
+  id             Int       @id @default(autoincrement())
+  email          String    @unique(map: "email")
+  passwordHash   String    @db.VarChar(255)
+  identite       String?   @db.Text
+  abonnement     String?   @db.Text
+  periodeImpaye  String?   @db.Text
+  temoinCgu      Int?      @default(0) @db.TinyInt
+  acceptCgu      String?   @db.Text
+  statut         String?   @db.Text
+  reprise        String?   @db.Text
+  tvaIntra       String?   @db.VarChar(16)
+  temoinAsso     Int?      @default(0) @db.TinyInt
+  temoinLogo     Int?      @default(0) @db.TinyInt
+  logoText       String?   @db.Text
+  logoData       Bytes?
+  logoMimeType   String?   @db.VarChar(50)
+  urlWeb         String?   @db.VarChar(40)
+  anFact         String?   @db.VarChar(4)
+  numFact        String?   @default("0") @db.VarChar(5)
+  temoinCgv      Int?      @default(0) @db.TinyInt
+  nbrMontAffaire String?   @default("0|0|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00") @db.VarChar(255)
+  suiviFac       String?   @default("0|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00") @db.VarChar(255)
+  blocNote       String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())
+  resetToken     String?   @unique(map: "resetToken") @db.VarChar(64)
+  resetTempHash  String?   @db.VarChar(255)
+  resetExpiresAt DateTime? @db.DateTime(0)
+
+  sessions Session[]
+  remembers Remember[]
+  affaires Affaire[]
+  clients Client[]
+  tarifs Tarif[]
+  recettes Recette[]
+
+  @@map("abonne")
+}
+
+model Affaire {
+  id         Int      @id @default(autoincrement())
+  libAffaire String   @db.VarChar(255)
+  libClient  String?  @db.VarChar(255)
+  situation  String?  @db.VarChar(3)
+  statutCode Int?
+  statutLib  String?  @db.VarChar(255)
+  devis      String?  @db.Text
+  facValide  Int?     @default(0) @db.TinyInt
+  suiviFac   String?  @default("0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00|0|0,00") @db.VarChar(255)
+  montFac    String?  @default("0,00") @db.VarChar(15)
+  montRegl   String?  @default("0,00") @db.VarChar(15)
+  montCli    String?  @default("0,00") @db.VarChar(15)
+  montPena   String?  @default("0,00") @db.VarChar(15)
+  montSolde  String?  @default("0,00") @db.VarChar(15)
+  archived   Int?     @default(0) @db.TinyInt
+  clientId   Int?
+  abonneId   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+  client     Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  abonne Abonne @relation(fields: [abonneId], references: [id])
+  factures Facture[]
+
+  @@index([abonneId],               map: "idx_affaire_abonne")
+  @@index([clientId],               map: "idx_affaire_client")
+  @@index([abonneId, situation],    map: "idx_affaire_abonne_situation")
+  @@index([abonneId, statutCode],   map: "idx_affaire_abonne_statut")   
+  @@map("affaire")
+}
+
+model Client {
+  id          Int      @id @default(autoincrement())
+  libClient   String   @db.VarChar(255)
+  temoinType  Int?     @default(0) @db.TinyInt
+  adres       String?  @db.VarChar(255)
+  adresCompl  String?  @db.VarChar(255)
+  cp          String?  @db.VarChar(5)
+  ville       String?  @db.VarChar(150)
+  pays        String?  @db.VarChar(60)
+  temoinCee   Int?     @default(0) @db.TinyInt
+  temoinTva   Int?     @default(0) @db.TinyInt
+  siren       String?  @db.VarChar(60)
+  tvaIntra    String?  @db.VarChar(60)
+  phone       String?  @db.VarChar(12)
+  mail        String?  @db.VarChar(60)
+  contNom     String?  @db.VarChar(60)
+  contPhone   String?  @db.VarChar(12)
+  contTexte   String?  @db.Text
+  debit       String?  @db.Text
+  credit      String?  @db.Text
+  soldeDebit  String? @default("0,00") @db.VarChar(15)
+  soldeCredit String? @default("0,00") @db.VarChar(15)
+  abonneId    Int
+  abonne Abonne @relation(fields: [abonneId], references: [id])
+  affaires  Affaire[]
+
+  @@index([abonneId], map: "idx_client_abonne")
+  @@map("client")
+}
+
+model Commun {
+  id           Int      @id
+  numAbonne    Int?
+  numCreance   Int?
+  seuil        String?  @db.Text
+  tauxBce      String?  @db.Text
+  tauxInter    String?  @db.Text
+  indemForfait String? @default("40,00") @db.VarChar(15)
+  
+  @@map("commun")
+}
+
+model Courrier {
+  id            Int     @id @default(autoincrement())
+  civilDest     String? @db.Text
+  nomPreDest    String? @db.Text
+  nomSignataire String? @db.Text
+  lettre        String? @db.Text
+  penalite      String? @db.Text
+  factureId     Int
+  abonneId      Int
+
+  @@index([abonneId], map: "courrier_ibfk_1")
+  @@map("courrier")
+}
+
+model Facture {
+  id            Int       @id @default(autoincrement())
+  codeType      Int
+  refFac        String    @db.VarChar(15)
+  refDevis      String?   @db.VarChar(15)
+  refPre        String?   @db.VarChar(15)
+  client        String?   @db.Text
+  statutCode    Int
+  statut        String    @db.VarChar(255)
+  regimeTva     String?   @default("A") @db.Char(1)
+  dateEmis      DateTime  @db.DateTime(0)
+  typeDelai     Int
+  delai         Int
+  dateEcheance  String    @db.VarChar(255)
+  ligne         String?   @db.Text
+  remTot        String?   @default("0,00") @db.VarChar(15)
+  total         String?   @db.Text
+  totTtc        String?   @default("0,00") @db.VarChar(15)
+  acompTaux     Int?
+  acompMont     String?   @db.Text
+  totPrestaHt   String?   @default("0,00") @db.VarChar(15)
+  totVenteHt    String?   @default("0,00") @db.VarChar(15)
+  dateRegl      DateTime? @db.DateTime(0)
+  imputCreCli   String?   @default("0,00") @db.VarChar(15)
+  totRegl       String?   @default("0,00") @db.VarChar(15)
+  montCli       String?   @default("0,00") @db.VarChar(15)
+  solde         String?   @default("0,00") @db.VarChar(15)
+  penalite      String?   @db.Text
+  soldePenalite String?   @default("0,00") @db.VarChar(15)
+  createdAt     DateTime  @default(now())  @db.DateTime(0)
+  courrierId    Int?
+  affaireId     Int
+  clientId      Int
+  abonneId      Int
+  affaire Affaire @relation(fields: [affaireId], references: [id])
+
+  @@index([affaireId],              map: "facture_ibfk_1")
+  @@index([abonneId],               map: "facture_ibfk_2")
+  @@index([affaireId, statutCode],  map: "idx_facture_affaire_statut")
+  @@index([clientId],               map: "idx_facture_client")
+  @@map("facture")
+}
+
+model pendingRegistration {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  email     String    @unique(map: "email") @db.VarChar(255)
+  password  String    @db.VarChar(255)
+  token     String    @unique(map: "token") @db.VarChar(64)
+  confirmed Int?      @default(0) @db.TinyInt
+  expiresAt DateTime  @db.DateTime(0)
+  createdAt DateTime? @default(now()) @db.DateTime(0)
+
+  @@map("pendingregistration")
+}
+
+model Recette {
+  id           Int       @id @default(autoincrement())
+  dateEmis     DateTime  @db.DateTime(0)
+  dateRegl     DateTime? @db.DateTime(0)
+  refFac       String    @db.VarChar(15)
+  cliNom       String    @db.VarChar(255)
+  libelle      String    @db.VarChar(255)
+  regimeTva    String?   @default("E") @db.Char(1)
+  modeRegl     String    @db.VarChar(255)
+  montRegl     String?   @default("0,00") @db.VarChar(15)
+  montHt       String?   @default("0,00") @db.VarChar(15)
+  ventilTva    String?   @db.Text
+  montTva      String?   @default("0,00") @db.VarChar(15)
+  montTtc      String?   @default("0,00") @db.VarChar(15)
+  debours      String?   @default("0,00") @db.VarChar(15)
+  penalite     String?   @default("0,00") @db.VarChar(15)
+  nature       String    @db.VarChar(255)
+  dateEcriture DateTime  @default(now())
+  factureId    Int
+  clientId     Int
+  abonneId     Int
+  abonne Abonne @relation(fields: [abonneId], references: [id])
+
+  @@index([abonneId], map: "recette")
+  @@map("recette")
+}
+
+
+model Remember {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?  @db.VarChar(255)
+  ipAddress String?  @db.VarChar(45)
+  abonneId  Int
+  abonne Abonne @relation(fields: [abonneId], references: [id], onDelete: Cascade)
+
+  @@index([abonneId, expiresAt], map: "idx_remember_abonne_expires")
+  @@map("remember")
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?  @db.VarChar(255)
+  ipAddress String?  @db.VarChar(45)
+  abonneId  Int
+  abonne Abonne @relation(fields: [abonneId], references: [id], onDelete: Cascade)
+
+  @@index([abonneId, expiresAt], map: "idx_session_abonne_expires")
+  @@map("session")
+}
+
+model Tarif {
+  id        Int      @id @default(autoincrement())
+  motCle    String   @db.VarChar(20)
+  textHtml  String   @db.VarChar(255)
+  nature    String   @db.VarChar(255)
+  unite     String   @db.VarChar(255)
+  prixUnite String?  @default("0,00") @db.VarChar(15)
+  tauxTva   String?  @default("0,0") @db.VarChar(15)
+  abonneId  Int
+  abonne Abonne @relation(fields: [abonneId], references: [id])
+
+  @@index([abonneId], map: "tarif")
+  @@map("tarif")
+}

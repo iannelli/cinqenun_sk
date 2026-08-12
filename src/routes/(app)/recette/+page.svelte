@@ -1,0 +1,1 @@
+<h1>Journal des Recettes</h1>
