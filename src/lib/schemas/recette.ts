@@ -136,7 +136,7 @@ export type RecetteTraitement = {
     facTotalRecetteArray2: RecetteTotalRow[];
     facMontDebours0:       string;
     facTotReglSav0:        string;
-    Ope0:                  string | null;   // null conservé car absence = pas d'opération
+    //Ope0:                  string | null;   // null conservé car absence = pas d'opération
     selRecettes:           Recette[];
 };
 
@@ -149,7 +149,7 @@ export function createRecetteTraitementVide(): RecetteTraitement {
         facTotalRecetteArray2: [],
         facMontDebours0:       '0,00',
         facTotReglSav0:        '0,00',
-        Ope0:                  null,
+        //Ope0:                  null,
         selRecettes:           [],
     };
 }

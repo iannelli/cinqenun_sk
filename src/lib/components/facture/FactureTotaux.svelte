@@ -37,9 +37,9 @@
             totaux.acompteId0      = totState.acompteId0;
             totaux.acompPresta0    = totState.acompPresta0;
             totaux.acompVente0     = totState.acompVente0;
-            if (totState.imputAcomp0 === '3') {
+            if (totState.imputAcomp0 === '3') { // Imposition Tva : Imputation de l'Acompte sur les lignes de totalisation
                 traitLigneTotal(facture, totaux);
-            } else {
+            } else { // Franchise Tva : Imputation de l'Acompte sur les Totaux Finaux
                 traitLibTotaux(facture, totaux);
                 traitColSpan(facture, totaux);
             }
@@ -82,8 +82,8 @@
         if (!facture || !client) return;
         vuImputSoldeClient0 = false;
         montantImputerSaisi = 0;
-        // Condition d'Affichage de la Saisie d'une Imputation d'un Excédent d'Encaissement ---
-        if (facture.codeType == 30 && facture.refFac.slice(0,2) == 'FB') {
+        // Condition d'Affichage de la Saisie d'une Imputation d'un Excédent d'Encaissement : Présence d'un Excédent d'Encaissement et d'une Facture Brouillon ---
+        if ( totState.imputAcomp0 !== '2' && totState.imputAcomp0 !== '3' && facture.codeType == 30 && facture.refFac.slice(0,2) == 'FB') {
             if ((facture.imputCreCli ?? 0) > 0) {
                 vuImputSoldeClient0 = true;
             }
@@ -103,31 +103,29 @@
         }
     }
     // Examen des Conditions d'Exécution du Traitement d'Imputation d'un excédent d'encaissement ────────────────────────────
-    function imputExcedentEncais(): void {
+    function examImputExcedentEncais(): void {
         if (!facture) return;
-        const soldeActuel  = parseFloat(String(facture.solde ?? '0').replace(',', '.')) || 0;
+        const totTtcActuel  = parseFloat(String(facture.totTtc ?? '0').replace(',', '.')) || 0;
         const montantSaisi = Number(montantImputerSaisi) || 0;
         // §II. Mode Modification : ne traiter que s'il y a une différence ---
         if (mode === 'update') {
             const imputCreCliActuel = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
             if (montantSaisi === imputCreCliActuel) {
-                return;   // aucune différence détectée : rien à faire
+                return; // aucune différence détectée : rien à faire
             }
         }
-        // §I.1 — Algorithme de traitement -----
+        // §I.1 — Détermination de la Situation de l'Imputation -----
         if (montantSaisi === 0) {
             imputSituation      = 'aucune';
             confirmImputMessage = "Aucune imputation du Crédit Client. Confirmez-vous ?";
             confirmImputVisible = true;
             return;
         }
-        if (montantSaisi >= soldeActuel) {
-            // §I.2
+        if (montantSaisi >= totTtcActuel) { // §I.2
             imputSituation      = "plafonne";
-            confirmImputMessage = "Le montant Imputé a été plafonné au montant du Solde de la Facture<br>Confirmez-vous cette Imputation ?";
+            confirmImputMessage = "Le montant Imputé a été plafonné au montant TTC Dû de la Facture<br>Confirmez-vous cette Imputation ?";
             confirmImputVisible = true;
-        } else {
-            // §I.3
+        } else { // §I.3
             imputSituation      = 'partielle';
             confirmImputMessage = "Confirmez-vous cette Imputation ?";
             confirmImputVisible = true;
@@ -137,22 +135,20 @@
     function confirmerImputation(): void {
         confirmImputVisible = false;
         if (!facture) return;
-        const soldeActuel = parseFloat(String(facture.solde ?? '0').replace(',', '.')) || 0;
+        const totTtcActuel = parseFloat(String(facture.totTtc ?? '0').replace(',', '.')) || 0;
         switch (imputSituation) {
             case 'aucune':
                 break;
             case 'plafonne': {
-                montantImputerSaisi = soldeActuel;
+                montantImputerSaisi = totTtcActuel;
                 facture.solde       = 0;
-                facture.imputCreCli = soldeActuel;
-                facture.statutCode  = 21;
-                facture.statut      = "<mark style='background:white;color:#0488fd'>Facture Réglée";
-                onImputationConfirmee?.(soldeActuel);   // ← vérifier présence
+                facture.imputCreCli = totTtcActuel;
+                onImputationConfirmee?.(totTtcActuel);   // ← vérifier présence
                 break;
             }
             case 'partielle': {
                 const montantSaisi = Number(montantImputerSaisi) || 0;
-                facture.solde       = soldeActuel - montantSaisi;
+                facture.solde       = totTtcActuel - montantSaisi;
                 facture.imputCreCli = montantSaisi;
                 onImputationConfirmee?.(montantSaisi);   // ← vérifier présence
                 break;
@@ -215,7 +211,7 @@
                             <input id="montImput2" name="montImput2" type="text" class="sg-input" placeholder=" " bind:value={montantImputerSaisi}>
                             <label for="montImput2" class="sg-label">Montant Imputé</label>
                         </div>
-                        <button type="submit" class="sg-button" style="font-size:12px;height:30px" disabled={Number(montantImputerSaisi) === 0} onclick={()=>imputExcedentEncais()}>Imputer</button>
+                        <button type="submit" class="sg-button" style="font-size:12px;height:30px" disabled={Number(montantImputerSaisi) === 0} onclick={()=>examImputExcedentEncais()}>Imputer</button>
                     </div>
                 </div>
             {/if}
@@ -300,29 +296,23 @@
         </table>
     {/if}
 </div>
-
+<!-- **** ModalConfirm **** -->
 {#if confirmCloseVisible}
-    <ModalConfirm
-        bind:visible={confirmCloseVisible}
+    <ModalConfirm bind:visible={confirmCloseVisible}
         titre="Abandon de la saisie"
         message="Des données ont été modifiées.<br>Confirmez-vous l'abandon ?"
         labelConfirm="Abandonner"
         labelAnnuler="Continuer la saisie"
         onconfirm={() => { confirmCloseVisible = false; pendingClose?.(); pendingClose = null; }}
-        onannuler={() => { confirmCloseVisible = false; pendingClose = null; }}
-    />
+        onannuler={() => { confirmCloseVisible = false; pendingClose = null; }} />
 {/if}
-
-<ModalConfirm
-    bind:visible={confirmImputVisible}
+<ModalConfirm bind:visible={confirmImputVisible}
     titre="Imputation du Crédit Client"
     message={confirmImputMessage}
     labelConfirm="Confirmer"
     labelAnnuler="Annuler"
     onconfirm={confirmerImputation}
-    onannuler={abandonImputation}
-/>
-
+    onannuler={abandonImputation} />
 
 <style>
     .inline-label { 

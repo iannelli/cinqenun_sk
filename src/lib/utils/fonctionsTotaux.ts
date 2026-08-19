@@ -1,6 +1,5 @@
 /**
  * Fonctions utilitaires communes pour la gestion des totalisations :  FactureTotaux.svelte, API PDF, etc.)
-
  * @param facture  - Objet Facture
  * @param tot      - État calculé des totalisations (mutated: bdp1Label0)
  */
@@ -75,21 +74,21 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
         // ──────────────────────────────────────────────────────────────
         case 10: { // Devis
             switch (true) {
-                case (acompTaux === 0 && remTotN === 0):
+                case (acompTaux === 0 && remTotN === 0): // Sans Acompte et Sans Remise
                     tot.arrTot10 = ['Total TTC', String(facture.totTtc), '1'];
                     tot.numLigneGras0 = 0;
                     break;
-                case (acompTaux === 0 && remTotN !== 0):
+                case (acompTaux === 0 && remTotN !== 0): // Sans Acompte et Avec remise
                     tot.arrTot10 = ['Total TTC', String(facture.totTtc), '1'];
                     tot.numLigneGras0 = 0;
                     tot.arrTot20 = [ facture.regimeTva === 'B' ? 'dont Remise HT' : 'dont Remise', remTot, '0' ];
                     break;
-                case (acompTaux !== 0 && remTotN === 0):
+                case (acompTaux !== 0 && remTotN === 0): // AVEC Acompte et Sans Remise
                     tot.arrTot10 = ['Total TTC', String(facture.totTtc), '0'];
                     tot.arrTot20 = [`Acompte (${facture.acompTaux}%) Dû`, String(facture.acompMont), '1'];
                     tot.numLigneGras0 = 1;
                     break;
-                case (acompTaux !== 0 && remTotN !== 0):
+                case (acompTaux !== 0 && remTotN !== 0): // AVEC Acompte AVEC remise
                     tot.arrTot10 = ['Total TTC', String(facture.totTtc), '0'];
                     tot.arrTot20 = [facture.regimeTva === 'B' ? 'dont Remise HT' : 'dont Remise', remTot, '0'];
                     tot.arrTot30 = [`Acompte (${facture.acompTaux}%) Dû`, String(facture.acompMont), '1'];
@@ -125,46 +124,41 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
             const acompMt  = String(facture.acompMont ?? '0,00');
             const imputStr = String(facture.imputCreCli ?? '0,00');
             switch (true) {
-                // Sans Remise, Sans Acompte, Sans Excédent
-                case (remTotN === 0 && !hasAcomp && imputCreCli === 0 && !coche):
+                case (remTotN === 0 && !hasAcomp && imputCreCli === 0 && !coche): // Sans Remise, Sans Acompte, Sans Excédent
                     tot.arrTot10 = ['Total TTC Dû ', totTtc, '1'];
                     tot.numLigneGras0 = 0;
                     break;
-                // Sans Remise, Sans Acompte, AVEC Excédent
-                case (remTotN === 0 && !hasAcomp && (imputCreCli !== 0 || coche)):
+                case (remTotN === 0 && !hasAcomp && (imputCreCli !== 0 || coche)): // Sans Remise, Sans Acompte, AVEC Excédent
                     tot.arrTot10 = ['Total TTC', totTtc, '0'];
-                    tot.arrTot20 = ['Imputation Excédent', imputStr, '0'];
+                    tot.arrTot20 = ['Imputation Crédit', imputStr, '0'];
                     tot.arrTot30 = ['Total TTC Dû ', fr(n(totTtc) - n(imputStr)), '1'];
                     tot.numLigneGras0 = 2;
                     break;
-                // Sans Remise, AVEC Acompte, Sans Excédent
-                case (remTotN === 0 && hasAcomp && imputCreCli === 0 && !coche):
-                    if (facture.regimeTva === 'B') {
+                case (remTotN === 0 && hasAcomp && imputCreCli === 0 && !coche): // Sans Remise, AVEC Acompte, Sans Excédent
+                    if (facture.regimeTva === 'B') { // Imposition TVA
                         tot.arrTot10 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 0;
-                    } else {
+                    } else { // Franchise TVA
                         tot.arrTot10 = ['Total TTC', totBrut, '0'];
                         tot.arrTot20 = ['Acompte réglé', acompMt, '0'];
                         tot.arrTot30 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 2;
                     }
                     break;
-                // Sans Remise, AVEC Acompte, AVEC Excédent
-                case (remTotN === 0 && hasAcomp && (imputCreCli !== 0 || coche)):
+                case (remTotN === 0 && hasAcomp && (imputCreCli !== 0 || coche)): // Sans Remise, AVEC Acompte, AVEC Excédent
                     tot.arrTot10 = ['Total TTC', totBrut, '0'];
-                    if (facture.regimeTva === 'B') {
-                        tot.arrTot20 = ['Imputation Excédent', imputStr, '0'];
+                    if (facture.regimeTva === 'B') { // Imposition TVA
+                        tot.arrTot20 = ['Imputation Crédit', imputStr, '0'];
                         tot.arrTot30 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 2;
-                    } else {
+                    } else { // Franchise TVA
                         tot.arrTot20 = ['Acompte réglé', acompMt, '0'];
-                        tot.arrTot30 = ['Imputation Excédent', imputStr, '0'];
+                        tot.arrTot30 = ['Imputation Crédit', imputStr, '0'];
                         tot.arrTot40 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 3;
                     }
                     break;
-                // AVEC Remise, Sans Acompte, Sans Excédent
-                case (remTotN !== 0 && !hasAcomp && imputCreCli === 0 && !coche):
+                case (remTotN !== 0 && !hasAcomp && imputCreCli === 0 && !coche): // AVEC Remise, Sans Acompte, Sans Excédent
                     tot.arrTot10 = ['Total TTC Dû ', totTtc, '1'];
                     tot.numLigneGras0 = 0;
                     tot.arrTot20 = [
@@ -172,24 +166,22 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
                         remTot, '0'
                     ];
                     break;
-                // AVEC Remise, Sans Acompte, AVEC Excédent
-                case (remTotN !== 0 && !hasAcomp && (imputCreCli !== 0 || coche)):
+                case (remTotN !== 0 && !hasAcomp && (imputCreCli !== 0 || coche)): // AVEC Remise, Sans Acompte, AVEC Excédent
                     tot.arrTot10 = ['Total TTC', totTtc, '0'];
                     tot.arrTot20 = [
                         facture.regimeTva === 'B' ? 'dont Remise HT' : 'dont Remise',
                         remTot, '0'
                     ];
-                    tot.arrTot30 = ['Imputation Excédent', imputStr, '0'];
+                    tot.arrTot30 = ['Imputation Crédit', imputStr, '0'];
                     tot.arrTot40 = ['Total TTC Dû ', fr(n(totTtc) - n(imputStr)), '1'];
                     tot.numLigneGras0 = 3;
                     break;
-                // AVEC Remise, AVEC Acompte, Sans Excédent
-                case (remTotN !== 0 && hasAcomp && imputCreCli === 0 && !coche):
-                    if (facture.regimeTva === 'B') {
+                case (remTotN !== 0 && hasAcomp && imputCreCli === 0 && !coche): // AVEC Remise, AVEC Acompte, Sans Excédent
+                    if (facture.regimeTva === 'B') { // Imposition TVA
                         tot.arrTot10 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 0;
                         tot.arrTot20 = ['dont Remise HT', remTot, '0'];
-                    } else {
+                    } else { // Franchise TVA
                         tot.arrTot10 = ['Total TTC', totBrut, '0'];
                         tot.arrTot20 = ['dont Remise', remTot, '0'];
                         tot.arrTot30 = ['Acompte réglé', acompMt, '0'];
@@ -197,18 +189,17 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
                         tot.numLigneGras0 = 3;
                     }
                     break;
-                // AVEC Remise, AVEC Acompte, AVEC Excédent
-                case (remTotN !== 0 && hasAcomp && (imputCreCli !== 0 || coche)):
+                case (remTotN !== 0 && hasAcomp && (imputCreCli !== 0 || coche)): // AVEC Remise, AVEC Acompte, AVEC Excédent
                     tot.arrTot10 = ['Total TTC', totBrut, '0'];
-                    if (facture.regimeTva === 'B') {
+                    if (facture.regimeTva === 'B') { // Imposition TVA
                         tot.arrTot20 = ['dont Remise HT', remTot, '0'];
-                        tot.arrTot30 = ['Imputation Excédent', imputStr, '0'];
+                        tot.arrTot30 = ['Imputation Crédit', imputStr, '0'];
                         tot.arrTot40 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 3;
-                    } else {
+                    } else { // Franchise TVA
                         tot.arrTot20 = ['dont Remise', remTot, '0'];
                         tot.arrTot30 = ['Acompte réglé', acompMt, '0'];
-                        tot.arrTot40 = ['Imputation Excédent', imputStr, '0'];
+                        tot.arrTot40 = ['Imputation Crédit', imputStr, '0'];
                         tot.arrTot50 = ['Total TTC Dû ', totTtc, '1'];
                         tot.numLigneGras0 = 4;
                     }
@@ -230,7 +221,7 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
             const totRegl = String(facture.totRegl ?? '0,00');
             const acompMt = String(facture.acompMont ?? '0,00');
             //const totRegl = String((facture as Record<string, unknown>).totRegl ?? '0,00');
-            if (facture.regimeTva === 'A') {
+            if (facture.regimeTva === 'A') { // Franchise TVA
                 if (n(acompMt) !== 0) {
                     tot.arrTot10 = ['Acompte réglé', acompMt, '0'];
                     tot.arrTot20 = ['Total TTC', totTtc, '1'];
@@ -410,8 +401,7 @@ export function traitLigneTotal(facture:Facture, tot:FactureTotauxState): void {
 
     // ── FACTURE : Imputation de l'Acompte ────────────────────────────────────
     if (codeType === '30') {
-        if (imputAcomp === '2') {
-            // Franchise TVA : imputation sur les totaux finaux
+        if (imputAcomp === '2') { // Franchise TVA : imputation sur les totaux finaux ---------
             const totBrut  = fmt2fr(cumulMontTtc);
             const acompMt  = n(facture.acompMont);
             const totNet   = cumulMontTtc - acompMt;
@@ -427,8 +417,7 @@ export function traitLigneTotal(facture:Facture, tot:FactureTotauxState): void {
                 (facture as Record<string, unknown>).totPrestaHt = fmt2fr(cal);
             }
         }
-        if (imputAcomp === '3') {
-            // Imposition TVA : imputation sur les lignes de totalisation
+        if (imputAcomp === '3') { // Imposition TVA : imputation sur les lignes de totalisation --------
             const arrAcomp = String(facture.acompMont ?? '').split(ROW_SEP);
             let ligTotAcompte = '';
             for (const itemAcomp of arrAcomp) {

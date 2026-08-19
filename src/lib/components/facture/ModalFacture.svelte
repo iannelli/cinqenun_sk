@@ -276,8 +276,7 @@ function demanderConfirmationValidation(): void {
     <p style="margin-top:30px"></p>
     <FactureLignes bind:facture bind:totaux {tarifs} {dateEcheanceDate0} {onrefresh} />
     <p style="margin-top:30px"></p>
-    <FactureTotaux bind:facture bind:totaux {totState} {client} {mode} {onrefresh} onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant}}
-/>
+    <FactureTotaux bind:facture bind:totaux {totState} {client} {mode} {onrefresh} onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant}}/>
     <div class="divButton0">
         <div class="divButton1">
             <button type="button" onclick={() => onOpenPdf?.()} title="Afficher au format Pdf" class="btn2"><img src="/apercu.png" alt=""/> Générer le Pdf</button>

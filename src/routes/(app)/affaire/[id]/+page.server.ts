@@ -8,7 +8,7 @@ import { ABONNE_SELECT, convertAbonneRawToAbonne, parseNbrMontAffaire, buildNbrM
 import { AffaireFormSchema, AFFAIRE_SELECT, convertAffaireRawToAffaire }                     from '$lib/schemas/affaire';
 import { updateAffaireLogic, deleteAffaireLogic }                                            from '$lib/server/affaireActions';
 import { CLIENT_SELECT, convertClientRawToClient, type Client }                              from '$lib/schemas/client';
-import { dateEcheanceSchema }                                                                from '$lib/schemas/facture';
+import { dateEcheanceSchema, parseTotal, type Total}                                         from '$lib/schemas/facture';
 import { ventilTvaRowSchema }                                                                from '$lib/schemas/recette';
 import { statutAffaireActive }         from '$lib/utils/statutAffaireActive';
 import { statutFacture }               from '$lib/utils/statutFacture';
@@ -338,7 +338,9 @@ export const actions = {
                 abonneId:       session.userId,
             },
         });
+        // ─── Détermination du Statut ────────────────────────────────────
         await determinationStatutFacture(facture);
+
         // ─── Création d'un Devis ────────────────────────────────────────
         if (parseInt(String(fd.get('codeType')), 10) === 10) {
             const affaireRaw  = await prisma.affaire.findUnique({ where:{id:affaireId}, select:{devis:true} });
@@ -351,84 +353,70 @@ export const actions = {
                                           de abonne.suiviFac et de abonne.nbrMontAffaire */
             await runStatutAffaireActive(session, affaireId, situationAvant, montSoldAvant, suiviFacAvant);
         }
+        
         // ─── Création d'une "Facture Brouillon" ────────────────────────────────────────
         if (parseInt(String(fd.get('codeType')), 10) === 30 && String(fd.get('refFac')).slice(0,2) === 'FB') {
             const refDevisFb = String(fd.get('refDevis') ?? '');
-            if (refDevisFb !== '') { // §I.2.1 - Si la Facture brouillon est en relation avec un Devis ---
+            // §I.2.1 - Si la Facture brouillon est en relation avec un Devis ---
+            if (refDevisFb !== '') {
                 const dev = await prisma.facture.findFirst({
-                    where:{ affaireId, abonneId:session.userId, codeType:10, refFac:refDevisFb },
-                    select:{ id:true, refFac:true, refDevis:true, statutCode:true, statut:true, acompTaux:true },
+                    where:  { affaireId, abonneId: session.userId, codeType: 10, refFac: refDevisFb },
+                    select: { id: true, refFac: true, refDevis: true, statutCode: true, statut: true, acompTaux: true },
                 });
                 if (dev) {
-                    if (dev.statutCode !== 20) {// Devis nonSigné ou avec Acompte nonRéglé -----
+                    if (dev.statutCode !== 20) {
                         const devisAvecAcompte = (Number(dev.acompTaux) || 0) > 0;
-                        if (!devisAvecAcompte) {// Devis sans acompte : mise en relation avec la "Facture Brouillon"
-                            await prisma.facture.update({
-                                where:{ id:dev.id },
-                                data:{ refDevis:facture.refFac },
-                            });
-                        } else { // Devis avec Acompte nonRéglé : pas de Facture d'Acompte existante
-                            await prisma.facture.update({
-                                where:{ id:dev.id },
-                                data:{ refDevis:'' },
-                            });
+                        if (!devisAvecAcompte) {
+                            await prisma.facture.update({ where: { id: dev.id }, data: { refDevis: facture.refFac } });
+                        } else {
+                            await prisma.facture.update({ where: { id: dev.id }, data: { refDevis: '' } });
                         }
                     }
-                    if (dev.statutCode === 20) { // Devis avec Acompte Réglé ------
-                        // Si le Devis est signé (sans acompte, facture validée déjà en relation) : aucune action
+                    if (dev.statutCode === 20) {
                         if (dev.statut.includes('Devis Acompte Réglé')) {
-                            const fa = await prisma.facture.findFirst({ // rechercher la Facture d'Acompte via dev.refDevis
-                                where:{ affaireId, abonneId:session.userId, codeType:20, refFac:dev.refDevis ?? undefined },
-                                select:{ id:true, refPre:true },
+                            const fa = await prisma.facture.findFirst({
+                                where:  { affaireId, abonneId: session.userId, codeType: 20, refFac: dev.refDevis ?? undefined },
+                                select: { id: true, refPre: true },
                             });
                             if (fa && (fa.refPre === '' || fa.refPre === null)) {
-                                await prisma.facture.update({
-                                    where:{ id:fa.id },
-                                    data: { refPre:facture.refFac },
-                                });
+                                await prisma.facture.update({ where: { id: fa.id }, data: { refPre: facture.refFac } });
                             }
                         }
                     }
                 }
-                // ─── I.2.3 — Imputation d'un excédent d'encaissement ───────────────────────
-                const montantImputerSaisi = parseFloat(String(fd.get('montantImputerSaisi') ?? '0').replace(',', '.')) || 0;
-                if (montantImputerSaisi > 0) {
-                    const totTtcNum  = parseFloat(String(facture.totTtc  ?? '0').replace(',', '.')) || 0;
-                    const totReglNum = parseFloat(String(facture.totRegl ?? '0').replace(',', '.')) || 0;
-                    const soldeAvantImputation = totTtcNum - totReglNum;
-                    // I.2.3.1 (partielle) vs I.2.3.2 (totale) — recalculé serveur
-                    const estImputationTotale = montantImputerSaisi >= soldeAvantImputation;
-                    const imputCreCliFinal    = estImputationTotale ? soldeAvantImputation : montantImputerSaisi;
-                    const soldeFinal          = estImputationTotale ? 0 : (totTtcNum - imputCreCliFinal - totReglNum);
-                    // ─── 1. Mise à jour de la Facture ────────────────────────────
-                    await prisma.facture.update({
-                        where: { id: facture.id },
-                        data: {
-                            imputCreCli: imputCreCliFinal.toFixed(2).replace('.', ','),
-                            solde:       soldeFinal.toFixed(2).replace('.', ','),
-                        },
-                    });
-                    // ─── 2. Écriture au Crédit du Compte Client (ligne négative) ──
-                    const rawClient = await prisma.client.findUniqueOrThrow({
-                        where:  { id: facture.clientId },
-                        select: CLIENT_SELECT,
-                    });
-                    await debitCreditClient({
-                        parOrigine:   'credit',
-                        parNature:    'imputation',
-                        parDate:      new Date().toLocaleDateString('fr-FR'),
-                        parMontant:   '-' + imputCreCliFinal.toFixed(2).replace('.', ','),
-                        parRefFac:    facture.refFac,
-                        parAffaireId: affaireId,
-                        parFacImput:  '',
-                        client:       convertClientRawToClient(rawClient),
-                    });
-                }
-                const { situationAvant, montSoldAvant, suiviFacAvant } = await getAffaireFactureMontants(affaireId, facture);
-                await runStatutAffaireActive(session, affaireId, situationAvant, montSoldAvant, suiviFacAvant);
             }
-            /* A la suite à la Création de la "Facture Brouillon", Actualisation (éventuelle) :
-               de statutCode et statut de chaque Facture de l'Affaire, du statut de l'Affaire (statutCode et statutLib) et de abonne.nbrMontAffaire */
+            
+            // ─── I.2.3 — Imputation d'un excédent d'encaissement ───────────────────────
+            // Rappel : une Facture Brouillon possède toujours totRegl = 0 — seule l'imputation affecte le solde
+            const montantImputerSaisi = parseFloat(String(fd.get('montantImputerSaisi') ?? '0').replace(',', '.')) || 0;
+            if (montantImputerSaisi > 0) {
+                const totTtcNum = parseFloat(String(facture.totTtc ?? '0').replace(',', '.')) || 0;
+                const estImputationTotale = montantImputerSaisi >= totTtcNum;
+                const imputCreCliFinal    = estImputationTotale ? totTtcNum : montantImputerSaisi;
+                const soldeFinal          = estImputationTotale ? 0 : (totTtcNum - imputCreCliFinal);
+                await prisma.facture.update({
+                    where: { id: facture.id },
+                    data: {
+                        imputCreCli: imputCreCliFinal.toFixed(2).replace('.', ','),
+                        solde:       soldeFinal.toFixed(2).replace('.', ','),
+                    },
+                });
+                const rawClient = await prisma.client.findUniqueOrThrow({
+                    where:  { id: facture.clientId },
+                    select: CLIENT_SELECT,
+                });
+                await debitCreditClient({
+                    parOrigine:   'credit',
+                    parNature:    'imputation',
+                    parDate:      new Date().toLocaleDateString('fr-FR'),
+                    parMontant:   '-' + imputCreCliFinal.toFixed(2).replace('.', ','),
+                    parRefFac:    facture.refFac,
+                    parAffaireId: affaireId,
+                    parFacImput:  '',
+                    client:       convertClientRawToClient(rawClient),
+                });
+            }
+            // ─── Actualisation unique du Statut Affaire, CA, nbrMontAffaire ────────────
             const { situationAvant, montSoldAvant, suiviFacAvant } = await getAffaireFactureMontants(affaireId, facture);
             await runStatutAffaireActive(session, affaireId, situationAvant, montSoldAvant, suiviFacAvant);
         }
@@ -456,7 +444,7 @@ export const actions = {
                         refDevis:      dev ? dev.refFac : refDevis,
                         client:        fd.get('client')        ? String(fd.get('client'))        : null,
                         statutCode:    21,
-                        statut:        String(fd.get('statut')),
+                        statut:        "<mark style='background:white;color:#0488fd'>Facture Acompte Réglée",
                         regimeTva:     fd.get('regimeTva')     ? String(fd.get('regimeTva'))     : null,
                         dateEmis:      new Date(String(fd.get('dateEmis'))),
                         typeDelai:     parseInt(String(fd.get('typeDelai')), 10) || 0,
@@ -559,9 +547,9 @@ export const actions = {
         const facture = await prisma.facture.findFirst({
             where:  { id: factureId, abonneId: session.userId },
             select: {
-                id: true, refFac: true, refDevis: true, dateEcheance: true,
-                totTtc: true, totRegl: true, imputCreCli: true, solde: true,
-                clientId: true, regimeTva: true, dateEmis: true,
+                id:true, refFac:true, refDevis:true, dateEcheance:true,
+                totTtc:true, totRegl:true, imputCreCli:true, solde:true,
+                clientId:true, regimeTva:true, dateEmis:true, total:true,
             },
         });
         if (!facture) return fail(404, { message: "Facture introuvable" });
@@ -575,7 +563,7 @@ export const actions = {
         const statut = `<mark style='background:white;color:${parsed.data.couleurHtml0}'>Facture Echéance <strong>${parsed.data.date0}`;
         const refFacBrouillon = facture.refFac;
         const imputCreCliVal  = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
-        const soldeVal         = parseFloat(String(facture.solde       ?? '0').replace(',', '.')) || 0;
+        const soldeVal        = parseFloat(String(facture.solde       ?? '0').replace(',', '.')) || 0;
         let devTtc = 0;
         const refFac = await prisma.$transaction(async (tx) => {
             // ─── Attribution du numéro définitif + statut par défaut (échéance) ──
@@ -584,14 +572,39 @@ export const actions = {
             // ─── III.3 — Imputation d'un excédent d'encaissement ────────────────
             if (imputCreCliVal > 0 && soldeVal === 0) {
                 // III.3.2 — Solde entièrement soldé par l'imputation
+                // I — Mise à jour du Statut
                 await tx.facture.update({
-                    where: { id: factureId },
-                    data:  { statutCode: 21, statut: "<mark style='background:white;color:#0488fd'>Facture Réglée" },
+                    where:{ id:factureId },
+                    data:{ statutCode:21, statut:"<mark style='background:white;color:#0488fd'>Facture Réglée" },
                 });
                 const rawClient = await prisma.client.findUniqueOrThrow({
-                    where:  { id: facture.clientId },
+                    where:{ id:facture.clientId },
                     select: CLIENT_SELECT,
                 });
+                // II.1 — Lecture des lignes de totalisation de la Facture Brouillon
+                const totalRows: Total | null = parseTotal(facture.total);
+                const lignesTotal = totalRows
+                    ? (Array.isArray(totalRows) ? totalRows : [totalRows])
+                    : [];
+                // II.2 — Construction de ventilTva et cumul de debours
+                const ventilLignes: string[] = [];
+                let deboursCumul = 0;
+                for (const ligne of lignesTotal) {
+                    // 1 — Vente ou Prestation (typeTotalisation0.slice(0,2) != '00')
+                    if (ligne.typeTotalisation0.slice(0,2) !== '00') {
+                        const tauxTva0    = ligne.typeTotalisation0.slice(0,4);
+                        const baseHt0     = ligne.montHt0;
+                        const montantTva0 = ligne.montTva0;
+                        ventilLignes.push([tauxTva0, baseHt0, montantTva0].join('¤'));
+                    }
+                    // 2 — Débours (typeTotalisation0.slice(4,6) == '20')
+                    if (ligne.typeTotalisation0.slice(4, 6) === '20') {
+                        deboursCumul += parseFloat(String(ligne.montTtc0 ?? '0').replace(',', '.')) || 0;
+                    }
+                }
+                const ventilTvaFinal = ventilLignes.length > 0 ? ventilLignes.join('|') : null;
+                const deboursFinal   = deboursCumul > 0 ? deboursCumul.toFixed(2).replace('.', ',') : null;
+                // 3 — Création de l'occurrence de Recette --------------
                 await tx.recette.create({
                     data: {
                         dateEmis:     facture.dateEmis,
@@ -603,10 +616,10 @@ export const actions = {
                         modeRegl:     'Imputation Crédit Client',
                         montRegl:     imputCreCliVal.toFixed(2).replace('.', ','),
                         montHt:       null,
-                        ventilTva:    null,
+                        ventilTva:    ventilTvaFinal,
                         montTva:      null,
                         montTtc:      imputCreCliVal.toFixed(2).replace('.', ','),
-                        debours:      null,
+                        debours:      deboursFinal,
                         penalite:     null,
                         nature:       'imputation',
                         dateEcriture: new Date(),
@@ -616,12 +629,12 @@ export const actions = {
                     },
                 });
             }
-            // III.3.1 — soldeVal > 0 : le statutCode/statut par échéance déjà appliqué ci-dessus est conservé tel quel
+
             // ─── Si la "Facture Brouillon" est en relation avec un Devis ────────
             if (facture.refDevis) {
                 const dev = await tx.facture.findFirst({
-                    where:  { affaireId, abonneId: session.userId, codeType: 10, refFac: facture.refDevis },
-                    select: { id: true, refFac: true, refDevis: true, statutCode: true, statut: true, totTtc: true, acompTaux: true },
+                    where:{ affaireId, abonneId:session.userId, codeType:10, refFac:facture.refDevis },
+                    select:{ id:true, refFac:true, refDevis:true, statutCode:true, statut:true, totTtc:true, acompTaux:true },
                 });
                 if (dev) {
                     if (dev.statutCode !== 20) {
@@ -629,23 +642,23 @@ export const actions = {
                         if (!devisAvecAcompte) {
                             if (dev.refDevis === refFacBrouillon) {
                                 await tx.facture.update({
-                                    where: { id: dev.id },
-                                    data:  { statutCode: 20, statut: "<mark style='background:white;color:#0488fd'>Devis Signé", refDevis: newRef },
+                                    where:{ id:dev.id },
+                                    data: { statutCode:20, statut:"<mark style='background:white;color:#0488fd'>Devis Signé", refDevis:newRef },
                                 });
                             }
                         } else {
                             const fa = await tx.facture.findFirst({
-                                where:  { affaireId, abonneId: session.userId, codeType: 20, refFac: dev.refDevis ?? undefined },
-                                select: { id: true, refFac: true, refPre: true },
+                                where:{ affaireId, abonneId:session.userId, codeType:20, refFac:dev.refDevis ?? undefined },
+                                select:{ id:true, refFac:true, refPre:true },
                             });
                             if (fa) {
                                 if (fa.refPre === refFacBrouillon) {
-                                    await tx.facture.update({ where: { id: factureId }, data: { refPre: fa.refFac } });
-                                    await tx.facture.update({ where: { id: fa.id },    data: { refPre: newRef } });
+                                    await tx.facture.update({ where:{ id:factureId }, data:{ refPre:fa.refFac } });
+                                    await tx.facture.update({ where:{ id:fa.id }, data:{ refPre:newRef } });
                                 }
                                 await tx.facture.update({
-                                    where: { id: dev.id },
-                                    data:  { statutCode: 20, statut: "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé" },
+                                    where:{ id:dev.id },
+                                    data:{ statutCode:20, statut:"<mark style='background:white;color:#0488fd'>Devis Acompte Réglé" },
                                 });
                             }
                         }
@@ -654,12 +667,12 @@ export const actions = {
                         if (dev.statut.includes('Devis Signé')) { /* aucune action */ }
                         if (dev.statut.includes('Devis Acompte Réglé')) {
                             const fa = await tx.facture.findFirst({
-                                where:  { affaireId, abonneId: session.userId, codeType: 20, refFac: dev.refDevis ?? undefined },
-                                select: { id: true, refFac: true, refPre: true },
+                                where:{ affaireId, abonneId:session.userId, codeType:20, refFac:dev.refDevis ?? undefined },
+                                select:{ id:true, refFac:true, refPre:true },
                             });
                             if (fa && fa.refPre === refFacBrouillon) {
-                                await tx.facture.update({ where: { id: factureId }, data: { refPre: fa.refFac } });
-                                await tx.facture.update({ where: { id: fa.id },    data: { refPre: newRef } });
+                                await tx.facture.update({ where:{ id:factureId }, data:{ refPre:fa.refFac } });
+                                await tx.facture.update({ where:{ id:fa.id }, data:{ refPre:newRef } });
                                 devTtc = parseFloat(String(dev.totTtc ?? '0').replace(',', '.')) || 0;
                             }
                         }
@@ -669,7 +682,7 @@ export const actions = {
             return newRef;
         });
         // ─── III.4 — Mise à jour des montants de l'Affaire ──────────────────────
-        const { situationAvant, montSoldAvant, suiviFacAvant, montFac: mF, montRegl: mR, montCli: mC, totTtc } = await getAffaireFactureMontants(affaireId, facture);
+        const { situationAvant, montSoldAvant, suiviFacAvant, montFac:mF, montRegl:mR, montCli:mC, totTtc } = await getAffaireFactureMontants(affaireId, facture);
         const montFac = mF - devTtc + totTtc;   // relation Facture d'Acompte via devTtc (0 si aucune)
         let montCli = mC;
         let montSolde: number;
@@ -690,7 +703,7 @@ export const actions = {
         });
         // ─── Actualisation Statut Affaire, CA Affaire, CA Abonné, nbrMontAffaire ──
         await runStatutAffaireActive(session, affaireId, situationAvant, montSoldAvant, suiviFacAvant);
-        return { success: true, refFac };
+        return { success:true, refFac };
     },
 
     // Annulation d'une Facture : ne Concerne que les "Factures d'Acompte" et les autres "Factures Validées"  ──────────────────────────────
@@ -1105,23 +1118,6 @@ export const actions = {
             },
         });
         return { success:true, recetteId:recette.id };
-    },
-    // Mise à jour du Mode d’Encaissement --------------------------------
-    updateModeReglRecette: async ({ request, locals }:RequestEvent) => {
-        const session   = locals.session;
-        if (!session) throw redirect(302, '/login');
-        const fd        = await request.formData();
-        const recetteId = parseInt(String(fd.get('recetteId')), 10);
-        if (isNaN(recetteId)) return fail(400, { message:'Identifiant recette invalide' });
-        try {
-            const existing = await prisma.recette.findFirst({ where:{ id:recetteId, abonneId:session.userId }, select:{ id:true } });
-            if (!existing) return fail(404, { message:'Recette introuvable' });
-            await prisma.recette.update({ where:{ id:recetteId }, data:{ modeRegl:String(fd.get('modeRegl')) } });
-            return { success:true };
-        } catch (err) {
-            console.error('Erreur updateModeReglRecette:', err);
-            return fail(500, { message:'Erreur serveur lors de la Mise à jour du Mode de Règlement.' });
-        }
     },
 
 // =========================================================================

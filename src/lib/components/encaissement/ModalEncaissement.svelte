@@ -1,20 +1,18 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { onDestroy } from 'svelte';
-    import type { Facture } from '$lib/schemas/facture';
+    import { onMount, onDestroy } from 'svelte';
+    import type { Facture }                          from '$lib/schemas/facture';
     import { parseClientFacture, createFactureVide } from '$lib/schemas/facture';
-    import type { Recette } from '$lib/schemas/recette';
-    import type { Affaire } from '$lib/schemas/affaire';
-    import type { Abonne } from '$lib/schemas/abonne';
-    import { numberToFrStr, formatDate, formatDateHeure, formatMontant } from '$lib/utils/format';
-    import { numericDecimal } from '$lib/utils/numeric';
-    import { drawerInfoUtils } from '$lib/utils/drawerInfo';
-    import { fiscPena }from '$lib/utils/messageInfo';
-    import ModalConfirm from '$lib/components/ModalConfirm.svelte';
-    import { createFacAcompteRec } from '$lib/components/encaissement/encaissement';
-    import { rt } from '$lib/stores/encaissementStore.svelte';
-   // import { statutAffaireActive } from '$lib/utils/statutAffaireActive';
-    import { deserialize } from '$app/forms';
+    import type { Recette }                          from '$lib/schemas/recette';
+    import type { Affaire }                          from '$lib/schemas/affaire';
+    import type { Abonne }                           from '$lib/schemas/abonne';
+    import { numberToFrStr, formatDate, formatMontant } from '$lib/utils/format';
+    import { numericDecimal }                           from '$lib/utils/numeric';
+    import { drawerInfoUtils }                          from '$lib/utils/drawerInfo';
+    import { fiscPena }                                 from '$lib/utils/messageInfo';
+    import ModalConfirm                                 from '$lib/components/ModalConfirm.svelte';
+    import { createFacAcompteRec, prepaRecetteInitTva, prepaRecetteInitFranchise, prepaRecetteComplTva, prepaRecetteComplFranchise } from '$lib/components/encaissement/encaissement';
+    import { rt }                  from '$lib/stores/encaissementStore.svelte';
+    import { deserialize }         from '$app/forms';
 
     // ─── Props ────────────────────────────────────────────────────
     let {
@@ -36,10 +34,12 @@
         onclose  : () => void;
         onrefresh : () => void;
     } = $props();
+    
+    let Ope0 = $state('');
 
     $effect(() => {
         if (vuDivSaisieEncais === 'saisieEncais') {
-            if (rt.Ope0 === 'U') {
+            if (Ope0 === 'U') {
                 // Modification : focus sur le select Mode Encaissement
                 (document.getElementById("modeEncaissId") as HTMLSelectElement)?.focus();
             }
@@ -75,7 +75,6 @@
     // ─── ModalConfirm ───────────────────────────────────────────────
     let vueDiffSaisieEncais           = $state(false);
     let messageDiffSaisieEncais       = $state('');
-    let vueConfirmAnnulRembour        = $state(false);
     let vueConfirmAbandonSaisieEncais = $state(false);
 
     let recetteLocale = $state({ ...recette });
@@ -84,8 +83,8 @@
         dialog?.showModal();
         marginBottom = 30;
         titre2 = "Affaire : " + affaire.libAffaire + "  -  Client : " + (parseClientFacture(facture.client)?.libClient0 ?? '');
+        // Encaissement du Règlement de l'Acompte mentionné dans un Devis ─────────────────────────────
         if (facture.codeType == 10) {
-            // Encaissement de l'Acompte ─────────────────────────────
             titre1 = "Devis N° " + facture.refFac + " : Encaissement de l`Acompte";
             rt.acompteMont0  = facture.acompMont ?? '0,00';
             rt.facMontantDu0 = facture.acompMont ?? '0,00';
@@ -94,8 +93,9 @@
             rt.selRecettes = facAcompte
                 ? recettes.filter((r: Recette) => r.factureId === facAcompte.id)
                 : [];
-        } else {
-            // Encaissement d'une Facture ─────────────────────────────
+        }
+        // Encaissement du Règlement d'une Facture ─────────────────────────────
+        if (facture.codeType == 30) {
             titre1 = "Encaissement des Règlements de la Facture";
             // Sélection des Recettes de la Facture
             rt.selRecettes = recettes.filter((r: Recette) => r.factureId === facture.id);
@@ -106,44 +106,35 @@
             const couleur = statut.slice(borne1, borne2 + 1);
             facColorSolde0   = "<mark style='background:white;" + couleur + (facture.solde ?? '0,00');
             rt.facMontantDu0 = facture.soldeStr;
-            // Facture en attente de règlement
-            if (Number(facture.montCliStr.replace(',', '.')) >= 0) {
-                rt.facMontFacturer0 = (Number(facture.soldeStr.replace(',', '.')) - Number(facture.soldePenaliteStr.replace(',', '.'))).toString();
-                facTotalRecetteArray0 = (facture.total ?? '').split('|');
-                if (facture.regimeTva === 'B') {
-                    // Imposition à la TVA ─────────────────────────────
-                    facTotalRecetteArray0.sort((a, b) => b.slice(0, 4).localeCompare(a.slice(0, 4)));
-                    rt.facTotalRecetteArray2 = [];
-                    for (let i = 0; i < facTotalRecetteArray0.length; i++) {
-                        const lig = facTotalRecetteArray0[i].split('¤');
-                        if (lig[0].slice(0, 4) === '00,0') {
-                            rt.facTotalRecetteArray2.push(
-                                rt.selRecettes.length === 0
-                                ? { tva: lig[0].slice(0,4), montHtDu: lig[2], montTtcDu: lig[2], soldeTtc: lig[2], imput: '0,00' }
-                                : { tva: lig[0].slice(0,4), montHtDu: lig[2], montEncais: '0,00', soldeHt: lig[2], soldeTtc: lig[2], imput: '0,00' }
-                            );
-                        } else {
-                            rt.facTotalRecetteArray2.push(
-                                rt.selRecettes.length === 0
-                                ? { tva: lig[0].slice(0,4), montHtDu: lig[2], montTtcDu: lig[6], soldeTtc: lig[6], imput: '0,00' }
-                                : { tva: lig[0].slice(0,4), montHtDu: lig[4], montEncais: '0,00', soldeHt: lig[4], soldeTtc: '0,00', imput: '0,00' }
-                            );
-                        }
-                    }
-                } else {
-                    // Franchise TVA : calcul du montant Débours ───────
-                    rt.facMontDebours0 = '0,00';
-                    for (let i = 0; i < facTotalRecetteArray0.length; i++) {
-                        const lig = facTotalRecetteArray0[i].split('¤');
-                        if (lig[0].slice(4, 6) === '20') {
-                            rt.facMontDebours0 = lig[2].replace(',', '.');
-                        }
+            rt.facMontFacturer0 = (Number(facture.soldeStr.replace(',', '.')) - Number(facture.soldePenaliteStr.replace(',', '.'))).toString();
+            facTotalRecetteArray0 = (facture.total ?? '').split('|');
+            if (facture.regimeTva === 'B') { // Imposition à la TVA ─────────────────────────────
+                facTotalRecetteArray0.sort((a, b) => b.slice(0, 4).localeCompare(a.slice(0, 4)));
+                rt.facTotalRecetteArray2 = [];
+                for (let i = 0; i < facTotalRecetteArray0.length; i++) {
+                    const lig = facTotalRecetteArray0[i].split('¤');
+                    if (lig[0].slice(0, 4) === '00,0') {
+                        rt.facTotalRecetteArray2.push(
+                            rt.selRecettes.length === 0
+                            ? { tva:lig[0].slice(0,4), montHtDu:lig[2], montTtcDu:lig[2], soldeTtc:lig[2], imput:'0,00' }
+                            : { tva:lig[0].slice(0,4), montHtDu:lig[2], montEncais:'0,00', soldeHt:lig[2], soldeTtc:lig[2], imput:'0,00' }
+                        );
+                    } else {
+                        rt.facTotalRecetteArray2.push(
+                            rt.selRecettes.length === 0
+                            ? { tva:lig[0].slice(0,4), montHtDu:lig[2], montTtcDu:lig[6], soldeTtc:lig[6], imput:'0,00' }
+                            : { tva:lig[0].slice(0,4), montHtDu:lig[4], montEncais:'0,00', soldeHt:lig[4], soldeTtc:'0,00', imput:'0,00' }
+                        );
                     }
                 }
-            } else {
-                // Facture avec un Excédent de Règlement ───────────────
-                modeEncaissements = ["Remboursement"];
-                facColorExcedent0 = "<mark style='background:white;color:#0488fd'>" + facture.montCliStr.replace('-', '');
+            } else {// Franchise TVA : calcul du montant Débours ───────
+                rt.facMontDebours0 = '0,00';
+                for (let i = 0; i < facTotalRecetteArray0.length; i++) {
+                    const lig = facTotalRecetteArray0[i].split('¤');
+                    if (lig[0].slice(4, 6) === '20') {
+                        rt.facMontDebours0 = lig[2].replace(',', '.');
+                    }
+                }
             }
         }
     });
@@ -169,12 +160,7 @@
     // ─── Initialisation des données de la Création d'une Recette avant Ouverture du Formulaire de Saisie ( Div d`Encaissement ] ──────────────────
     function initRecette() {
         marginBottom = 110;
-        if (Number(facture.montCliStr.replace(',', '.')) >= 0) {
-            rt.Ope0 = '';
-        }
-        if (facture.codeType == 10 || facture.codeType == 30) {
-            rt.Ope0 = 'C1';
-        }
+        Ope0 = '';
         titreSaisieEncaissement = "Création d`un Encaissement";
         recetteLocale.dateEmis  = facture.dateEmis;
         dateInputEncais   = '';
@@ -189,17 +175,33 @@
         vuDivSaisieEncais = 'saisieEncais';
     }
 
+    // Modification du Mode d'Encaissement ────────────────────────────
+    function editRecette(rec: Recette) {
+        Ope0 = 'U';
+        recetteLocale = { ...rec };  // ← copie dans la variable réactive
+        marginBottom = 110;
+        titreSaisieEncaissement = "Modification du mode d`Encaissement";
+        modeEncaissements = ["Virement", "Carte Bancaire", "Chèque", "Espèce", "Prélèvement"];
+        elemNonOk = true;
+        inputColor = '#D1D1D1';
+        btnNonOk = false;
+        const d = new Date(rec.dateEmis);
+        dateInputEncais = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        rt.saisiAImputer0 = String(rec.montRegl ?? '0,00');
+        vuDivSaisieEncais = 'saisieEncais';
+    }
+
     // Vérification des données de la Saisie d'un Encaissement ─────────────────
     async function verifSaisieEncais() {
         btnNonOk = true;
-        if (rt.Ope0 == 'U') {
+        // ── Mise à jour du Mode de Règlement ──────────────────────────
+        if (Ope0 === 'U') {
             vuDivSaisieEncais = '';
-            // ── Mise à jour du Mode de Règlement ──────────────────────────
             const fd = new FormData();
             fd.append('recetteId', String(recetteLocale.id));
             fd.append('modeRegl',  recetteLocale.modeRegl);
             try {
-                const response = await fetch('?/updateModeReglRecette', { method: 'POST', body: fd });
+                const response = await fetch('/recette?/updateModeReglRecette', { method: 'POST', body: fd });
                 const result    = deserialize(await response.text());
                 if (result.type === 'success') {
                     afficherBandeau("Mode de règlement mis à jour avec succès.", true, 3000);
@@ -217,7 +219,8 @@
                 afficherBandeau("Erreur réseau lors de la mise à jour du mode de règlement.", false);
             }
         } else {
-            // ── Contrôles de saisie : accumulation de toutes les erreurs ──
+        // Saisie d'un encaissement ────────────────────────────────────────────────────
+            // ── Contrôles de saisie : cumulation des erreurs ------
             const erreurs: string[] = [];
             if (!dateInputEncais) {
                 erreurs.push("La date d'encaissement est obligatoire.");
@@ -235,95 +238,69 @@
             }
             // ── Si Aucune erreur : poursuite du Traitement ───────
             bandeauVisible = false;
-            if (facture.codeType == 30 || facture.codeType == 40) {// Facture OU Remboursement sur Facture d'Avoir : Préparation de l'Occurrence de Recette
-                recetteLocale.dateEmis = new Date(parseInt(dateInputEncais.slice(0, 4)), parseInt(dateInputEncais.slice(5, 7)) - 1, parseInt(dateInputEncais.slice(8, 10)));
-                recetteLocale.dateRegl = recetteLocale.dateEmis;
-                recetteLocale.refFac = facture.refFac;
-                recetteLocale.cliNom = parseClientFacture(facture.client)?.libClient0 ?? '';
-                recetteLocale.libelle = affaire.libAffaire;
-                recetteLocale.regimeTva = facture.regimeTva;
-                //recetteLocale.modeRegl a été mis à jour dans le formulaire
-                formatDateHeure(recetteLocale.dateEcriture) // jj/mm/aaaa hh:mn
-                recetteLocale.factureId = facture.id;
-                recetteLocale.clientId  = facture.clientId;
-                recetteLocale.abonneId  = facture.abonneId;
-            }
-            if (rt.Ope0 != 'C4') { // Le règlement ne concerne pas un Excédent ────────────
-                // Si EGALITE entre le montant saisi et le montant Dû[facture.acompMont ou $Facture.facSolde0] ────────────
-                if (Number((rt.saisiAImputer0 ?? '0').replace(',', '.')) === Number((rt.facMontantDu0 ?? '0').replace(',', '.'))) {
-                    // Devis : Encaissement de l'Acompte *** rt.Ope0 = 'C1' ────────────
-                    if (facture.codeType == 10) {
-                        vuDivSaisieEncais = '';
-                        // Création Concomitante de la Facture d'Acompte et de la Recette correspondante --------
-                        recetteLocale.dateRegl = new Date(
-                            parseInt(dateInputEncais.slice(0, 4)),
-                            parseInt(dateInputEncais.slice(5, 7)) - 1,
-                            parseInt(dateInputEncais.slice(8, 10))
+            // Si EGALITE entre le montant saisi et le montant Dû[facture.acompMont ou facture.facSolde0] ────────────
+            if (Number((rt.saisiAImputer0 ?? '0').replace(',', '.')) === Number((rt.facMontantDu0 ?? '0').replace(',', '.'))) {
+                // Devis : Encaissement du Règlement de l'Acompte ────────────
+                if (facture.codeType == 10) {
+                    vuDivSaisieEncais = '';
+                    recetteLocale.dateRegl = new Date(
+                        parseInt(dateInputEncais.slice(0, 4)),
+                        parseInt(dateInputEncais.slice(5, 7)) - 1,
+                        parseInt(dateInputEncais.slice(8, 10))
+                    );
+                    recetteLocale.montRegl = rt.saisiAImputer0;
+                    const nouvelleFacture = createFactureVide();
+                    afficherBandeau("⏳ Création en cours …", true, 60000);
+                    document.body.style.cursor = 'wait';
+                    // ── Confection de l'occurrence de Recette relative au Règlement de l'Acompte
+                    const { ok, recetteId } = await createFacAcompteRec(
+                        1, facture, nouvelleFacture, recetteLocale, rt, abonne, 'Acompte',
+                        (s) => { afficherBandeau(s.message, s.succes); },
+                        (v) => { btnNonOk = v; }
+                    );
+                    document.body.style.cursor = 'default';
+                    if (!ok) return;
+                    // ── Mise à jour locale de l'UI -----
+                    if (recetteId) recetteLocale.id = recetteId;
+                    facture.statutCode = 20;
+                    facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
+                    rt.selRecettes     = [...rt.selRecettes, { ...recetteLocale }];
+                    afficherBandeau("Encaissement enregistré avec succès.", true, 3000);
+                    onrefresh();
+                }
+                // Création de la Recette relative au Règlement de la Facture ────────────
+                if (facture.codeType == 30) {
+                    facture.statutCode = 21;
+                    rt.facTotReglSav0 = numberToFrStr(facture.totRegl);
+                    // ── Choix du Type de Préparation pour la Création de l'Occurrence de Recette -----
+                    await typePreparation(); 
+                    // ── Actualisation éventuelle du Statut du Devis lié à cette Facture ----
+                    if (facture.refDevis) {
+                        const devisLie = factures.find(f =>
+                            f.refFac.slice(0, 1) === 'D' && f.statutCode !== 20 && f.refFac === facture.refDevis
                         );
-                        recetteLocale.montRegl = rt.saisiAImputer0;
-                        const nouvelleFacture = createFactureVide();
-                        afficherBandeau("⏳ Création en cours …", true, 60000);
-                        document.body.style.cursor = 'wait';
-                        const { ok } = await createFacAcompteRec(
-                            1, facture, nouvelleFacture, recetteLocale, rt, abonne, '',
-                            (s) => { afficherBandeau(s.message, s.succes); },
-                            (v) => { btnNonOk = v; }
-                        );
-                        document.body.style.cursor = 'default';
-                        if (!ok) return;
-                        afficherBandeau("Encaissement enregistré avec succès.", true, 3000);
-                        onrefresh();
-                    } else { // Création de la Recette relative à la Facture (autre qu’une Facture d’Acompte)
-                        rt.Ope0 = 'C1';
-                        facture.statutCode = 21;
-                        rt.facTotReglSav0 = numberToFrStr(facture.totRegl);
-                        typePreparation(); // Choix du Type de Préparation pour la Création de l'Occurrence de Recette
-                        // ── Actualisation éventuelle du Statut du Devis lié à cette Facture ──────
-                        if (facture.refDevis) {
-                            const devisLie = factures.find(f =>
-                                f.refFac.slice(0, 1) === 'D' && f.statutCode !== 20 && f.refFac === facture.refDevis
-                            );
-                            if (devisLie) {
-                                devisLie.statutCode = 20;
-                                devisLie.statut      = "<mark style='background:white;color:#0488fd'>Devis Signé";
-                                const fdDevisLie = new FormData();
-                                fdDevisLie.append('factureId',  String(devisLie.id));
-                                fdDevisLie.append('statutCode', String(devisLie.statutCode));
-                                fdDevisLie.append('statut',     devisLie.statut);
-                                try {
-                                    const responseDevisLie = await fetch('?/updateStatutFacture', { method: 'POST', body: fdDevisLie });
-                                    const resultDevisLie    = deserialize(await responseDevisLie.text());
-                                    if (resultDevisLie.type !== 'success') {
-                                        afficherBandeau("Erreur lors de la mise à jour du statut du Devis lié.", false);
-                                    }
-                                } catch {
-                                    afficherBandeau("Erreur réseau lors de la mise à jour du statut du Devis lié.", false);
+                        if (devisLie) {
+                            devisLie.statutCode = 20;
+                            devisLie.statut      = "<mark style='background:white;color:#0488fd'>Devis Signé";
+                            const fdDevisLie = new FormData();
+                            fdDevisLie.append('factureId',  String(devisLie.id));
+                            fdDevisLie.append('statutCode', String(devisLie.statutCode));
+                            fdDevisLie.append('statut',     devisLie.statut);
+                            try {
+                                const responseDevisLie = await fetch('?/updateStatutFacture', { method: 'POST', body: fdDevisLie });
+                                const resultDevisLie    = deserialize(await responseDevisLie.text());
+                                if (resultDevisLie.type !== 'success') {
+                                    afficherBandeau("Erreur lors de la mise à jour du statut du Devis lié.", false);
                                 }
+                            } catch {
+                                afficherBandeau("Erreur réseau lors de la mise à jour du statut du Devis lié.", false);
                             }
                         }
                     }
-                } else {// Si DIFFERENCE entre le montant Dû et le montant encaissé ────────────────────────
-                    afficheDiffSaisieEncais();
                 }
-            } else { // Remboursement d'un Règlement Excédentaire rt.Ope0 == 'C4' ---
-                recetteLocale.montRegl = '-' + rt.saisiAImputer0;
-                recetteLocale.montHt = '0,00';
-                recetteLocale.ventilTva = '';
-                recetteLocale.montTva = '0,00';
-                recetteLocale.montTtc = '-' + rt.saisiAImputer0;
-                recetteLocale.debours = '0,00';
-                recetteLocale.penalite = '0,00';
-                recetteLocale.nature = 'Remboursement Excédent';
-                if (facture.codeType != 40) { // Remboursement portant sur une Facture (sauf Facture d'Avoir)
-                    let cal = Number(facture.montCliStr.replace(/[,]/, '.')) + Number(rt.saisiAImputer0.replace(/[,]/, '.'));
-                    facture.montCliStr = cal.toFixed(2).replace(/[.]/, ',');
-                    if (facture.montCliStr == '0,00') {
-                        facture.statutCode = 21;
-                    } else {
-                        facture.statutCode = 22;
-                    }
-                }
-             }
+            } else {// Si DIFFERENCE entre le montant Dû et le montant encaissé ────────────────────────
+                afficheDiffSaisieEncais();
+            }
         }
     }
 
@@ -354,149 +331,118 @@
     async function confirmDiffSaisieEncais() {
         vueDiffSaisieEncais = false;
         vueDiffSaisieEncais = false;
+        // DEVIS - FACTURE d'ACOMPTE : Constitution d'une occurrence de Recette -----
         if (facture.codeType == 10) {
-            const calSaisi = Number((rt.saisiAImputer0 ?? '0').replace(',', '.'));
-            const calDu    = Number((rt.facMontantDu0  ?? '0').replace(',', '.'));
-            const coef     = calSaisi / calDu;
+            const calSaisi  = Number((rt.saisiAImputer0 ?? '0').replace(',', '.'));
+            const calDu     = Number((rt.facMontantDu0  ?? '0').replace(',', '.'));
+            const coef      = calSaisi / calDu;
             rt.acompteMont0 = rt.saisiAImputer0;
             const nouvelleFacture = createFactureVide();
-            const ok = await createFacAcompteRec(
-                coef,
-                facture,
-                nouvelleFacture,
-                recetteLocale,
-                rt,
-                abonne,
-                '', // donnée "recette.nature"
+            const { ok, recetteId } = await createFacAcompteRec(
+                coef, facture, nouvelleFacture, recetteLocale, rt, abonne, 'Acompte',
                 (s) => { bandeauMessage = s.message; bandeauSucces = s.succes; bandeauVisible = s.visible; },
                 (v) => { btnNonOk = v; }
             );
             if (!ok) return;
+            if (recetteId) recetteLocale.id = recetteId;
+            facture.statutCode = 20;
+            facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
+            rt.selRecettes     = [...rt.selRecettes, { ...recetteLocale }];
             afficherBandeau("Encaissement enregistré avec succès.", true, 2000);
-            rt.selRecettes = [...rt.selRecettes, { ...recetteLocale }];
+            onrefresh();
         }
         // FACTURE : Constitution d'une occurrence de Recette -----
         if (facture.codeType == 30) {
             if (Number(rt.saisiAImputer0.replace(/[,]/, '.')) > Number(rt.facMontantDu0.replace(/[,]/, '.'))) { // Encaissement excédentaire : Montant saisi > Montant Dû ----
-                rt.Ope0 = 'C2';
                 facture.statutCode = 22;
             } else { // Encaissement partiel : Montant saisi < Montant Dû ----
-                rt.Ope0 = 'C3';
                 facture.statutCode = 27;
             }
-            typePreparation(); // Choix du Type de Préparation pour la Création de l'Occurrence de Recette
+            await typePreparation(); // Choix du Type de Préparation pour la Création de l'Occurrence de Recette
         }
     }
 
-    // Détermination du Type de Préparation pour la Création de l'Occurrence de Recette de la Facture (Facture d’Acompte non concernée)
-    function typePreparation() {
-        if (rt.selRecettes.length == 0) {// Saisie d'un Encaissement Initial
-            if (facture.regimeTva == 'B') { // Imposition à la Tva
-                //export.prepaRecetteInitTva(e);
-            } else { // Franchise Tva
-                //export.prepaRecetteInitFranchise(e);
-            }
-        } else { // Saisie d'un Encaissement Complémentaire
-            if (facture.regimeTva == 'B') { // Imposition à la Tva
-                //export.prepaRecetteComplTva(e);
+    // Détermination du Type de Préparation pour la Création de l'Occurrence de Recette de la Facture (Facture d'Acompte non concernée)
+    async function typePreparation() {
+        if (rt.selRecettes.length == 0) { // Saisie d'un Encaissement Initial ────
+            if (facture.regimeTva == 'B') {
+                prepaRecetteInitTva(facture, recetteLocale, rt);
             } else {
-                //export.prepaRecetteComplFranchise(e);
+                prepaRecetteInitFranchise(facture, recetteLocale, rt);
+            }
+            // ── Appel serveur createRecette ───────────────────────────────────
+            const fd = new FormData();
+            fd.append('dateEmis',      recetteLocale.dateEmis.toISOString());
+            fd.append('dateRegl',      recetteLocale.dateRegl?.toISOString() ?? new Date().toISOString());
+            fd.append('refFac',        recetteLocale.refFac);
+            fd.append('cliNom',        recetteLocale.cliNom);
+            fd.append('libelle',       recetteLocale.libelle);
+            fd.append('regimeTva',     recetteLocale.regimeTva  ?? '');
+            fd.append('modeRegl',      recetteLocale.modeRegl);
+            fd.append('montRegl',      recetteLocale.montRegl   ?? '0,00');
+            fd.append('montHt',        recetteLocale.montHt     ?? '0,00');
+            fd.append('ventilTva',     recetteLocale.ventilTva  ?? '');
+            fd.append('montTva',       recetteLocale.montTva    ?? '0,00');
+            fd.append('montTtc',       recetteLocale.montTtc    ?? '0,00');
+            fd.append('debours',       recetteLocale.debours    ?? '0,00');
+            fd.append('penalite',      recetteLocale.penalite   ?? '0,00');
+            fd.append('nature',        recetteLocale.nature     ?? '');
+            fd.append('factureId',     String(facture.id));
+            fd.append('clientId',      String(facture.clientId));
+            fd.append('affaireId',     String(affaire.id));
+            fd.append('totRegl',       String(facture.totRegl       ?? 0));
+            fd.append('montCli',       String(facture.montCli       ?? 0));
+            fd.append('solde',         String(facture.solde         ?? 0));
+            fd.append('soldePenalite', String(facture.soldePenalite ?? 0));
+            try {
+                const response = await fetch('/recette?/createRecette', { method: 'POST', body: fd });
+                const result    = deserialize(await response.text());
+                if (result.type === 'success') {
+                    const recetteId = (result.data as { recetteId?: number })?.recetteId;
+                    if (recetteId) recetteLocale.id = recetteId;
+                    rt.selRecettes = [...rt.selRecettes, { ...recetteLocale }];
+                    afficherBandeau("Encaissement enregistré avec succès.", true, 3000);
+                    onrefresh();
+                } else {
+                    afficherBandeau("Erreur lors de la création de l'encaissement.", false);
+                    btnNonOk = false;
+                }
+            } catch {
+                afficherBandeau("Erreur réseau lors de la création de l'encaissement.", false);
+                btnNonOk = false;
+            }
+        } else { // Saisie d'un Encaissement Complémentaire ───────────────────────
+            if (facture.regimeTva == 'B') {
+                prepaRecetteComplTva(facture, recetteLocale, rt);
+            } else {
+                prepaRecetteComplFranchise(facture, recetteLocale, rt);
             }
         }
     }
 
     function confirmAbandonSaisieEncais() {
-        if (rt.Ope0 == 'C4') {
-            // Remboursement en cours : confirmation de l'Annulation du remboursement
-            vueConfirmAnnulRembour = true;
-        } else {
-            // Création ou Modification : demande confirmation d'abandon
-            vueConfirmAbandonSaisieEncais = true;
-        }
-    }
-
-    function editRecette(rec: Recette) {
-        recetteLocale = { ...rec };  // ← copie dans la variable réactive
-        marginBottom = 110;
-        if (rec.nature == 'Excédent') {
-            titreSaisieEncaissement = "Saisie du Remboursement";
-            modeEncaissements = ["Remboursement"];
-            recetteLocale.modeRegl = "Remboursement";
-            elemNonOk = false;
-            inputColor = 'black';
-            rt.Ope0 = 'C4';
-        } else {
-            titreSaisieEncaissement = "Modification du mode d`Encaissement";
-            modeEncaissements = ["Virement", "Carte Bancaire", "Chèque", "Espèce", "Prélèvement"];
-            elemNonOk = true;
-            inputColor = '#D1D1D1';
-            rt.Ope0 = 'U';
-        }
-        btnNonOk = false;
-        const d = new Date(rec.dateEmis);
-        dateInputEncais = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        rt.saisiAImputer0 = String(rec.montRegl ?? '0,00');
-        vuDivSaisieEncais = 'saisieEncais';
-    }
-
-    // Confirmation de l'Annulation du Remboursement de l'Excédent et Requête serveur -------------
-    function retourComfirmAnnulRembour() {
-        rt.Ope0 = 'C5';
-        /*let indRec = rt.selRecettes.findIndex(obj => {
-        return obj.id == $Recette.id0;
-        });*/
-        //recetteLocale.dateEmis = date du jour sous la forme ‘jj/mm/aaaa’
-        recetteLocale.dateRegl = recetteLocale.dateEmis;
-        recetteLocale.refFac = facture.refFac;
-        recetteLocale.cliNom = parseClientFacture(facture.client)?.libClient0 ?? '';
-        recetteLocale.libelle = affaire.libAffaire;
-        recetteLocale.regimeTva = facture.regimeTva;
-        recetteLocale.modeRegl = 'Annulation Remboursement';
-        // recetteLocale.dateEcriture : date du jour sous la forme "jj/mm/aaaa hh:mn"
-        recetteLocale.factureId = facture.id;
-        recetteLocale.clientId = facture.clientId;
-        recetteLocale.abonneId = facture.abonneId;
-        // recetteLocale.montRegl = $selRecettes[indRec].recReglMont.replace(/[-]/, '');
-        recetteLocale.montHt = '0,00';
-        recetteLocale.ventilTva = '';
-        recetteLocale.montTva = '0,00';
-        // recetteLocale.montTtc0 = $selRecettes[indRec].recReglMont.replace(/[-]/, '');
-        recetteLocale.debours = '0,00';
-        recetteLocale.penalite = '0,00';
-        recetteLocale.nature = 'Annulation Remboursement';
-        let cal = Number(facture.montCliStr.replace(/[,]/, '.')) - Number((recetteLocale.montRegl ?? '0,00').replace(/[,]/, '.'));
-        facture.montCliStr = cal.toFixed(2).replace(/[.]/, ',');
-        if (facture.montCliStr == '0,00') {
-            facture.statutCode = 21;
-        } else {
-            facture.statutCode = 22;
-        }
-        // reqRecette.cuRecette(e);  Requete serveur
+        // Création ou Modification : demande confirmation d'abandon
+        vueConfirmAbandonSaisieEncais = true;
     }
 </script>
-
+<!-- ModalConfirm ────────────────────────  -->
 {#if vueDiffSaisieEncais}
     <ModalConfirm bind:visible={vueDiffSaisieEncais} titre="Encaissement : Montant Saisie Différent du Montant Dû" message={messageDiffSaisieEncais} labelConfirm="Confirmer"
         onconfirm={() => confirmDiffSaisieEncais()}
         onannuler={() => {vueDiffSaisieEncais=false}}/>
 {/if}
-{#if vueConfirmAnnulRembour}
-    <ModalConfirm bind:visible={vueConfirmAnnulRembour} titre="Annulation d`un Remboursement" message="Confirmez-vous l`Annulation de ce Remboursement ?" labelConfirm="Confirmer"
-        onconfirm={() => retourComfirmAnnulRembour()}
-        onannuler={() => { vueConfirmAnnulRembour = false }}/>
-{/if}
 {#if vueConfirmAbandonSaisieEncais}
     <ModalConfirm
         bind:visible={vueConfirmAbandonSaisieEncais}
         titre="Abandon de la saisie"
-        message={rt.Ope0 == 'U' ? "Confirmez-vous l'abandon de la modification ?" : "Confirmez-vous l'abandon de la saisie ?"}
+        message={Ope0 === 'U' ? "Confirmez-vous l'Abandon de la Modification ?" : "Confirmez-vous l'Abandon de la Saisie ?"}
         labelAnnuler = "Non"
         labelConfirm = "Confirmer"
         onconfirm={() => { vueConfirmAbandonSaisieEncais = false; vuDivSaisieEncais = ''; }}
         onannuler={() => vueConfirmAbandonSaisieEncais = false}/>
 {/if}
 
-<!-- Formulaire d'encaissement : Devis ou Facture -->
+<!-- Formulaire d'Encaissement : Devis ou Facture -->
 <dialog bind:this={dialog} class="sg-divDialog sg-divDialog--large dialogStyle">
     {#if bandeauVisible}
         <div style="position:sticky;top:0;z-index:10;padding:8px 16px;font-size:13px;font-weight:600;text-align:center;border-radius:3px;margin-bottom:6px;background-color:{bandeauSucces?'#d4edda':'#f8d7da'};color:{bandeauSucces?'#155724':'#721c24'};border: 1px solid {bandeauSucces?'#c3e6cb':'#f5c6cb'}">

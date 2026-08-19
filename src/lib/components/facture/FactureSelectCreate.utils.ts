@@ -97,7 +97,7 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
     }
     // ── Attribution du régime TVA ─────────────────────────────────
     newFacture.regimeTva = regimeTvaFacture(pays0, cee0, tva0, ctx.statutRaw);
-    // ── Détermination si un Acompte reste à Imputer ───────────────
+    // ── Détermination si un Acompte reste à Imputer sur la 1ère facture suivant la Facture d'Acompte (réglée et non-encore imputée) ───────────────
     if (newFacture.codeType === 30) {
         ctx.totState.imputAcomp0 = '1';
         ctx.totState.acompteId0  = 0;
@@ -106,12 +106,12 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
         );
         if (indFac !== -1) {
             const fAcomp = ctx.factures[indFac];
-            if (newFacture.regimeTva !== 'B') {
+            if (newFacture.regimeTva !== 'B') { // Franchise Tva ---
                 ctx.totState.imputAcomp0  = '2';
                 newFacture.acompMont      = String(fAcomp.totRegl     ?? '0,00');
                 ctx.totState.acompPresta0 = String(fAcomp.totPrestaHt ?? '0,00');
                 ctx.totState.acompVente0  = String(fAcomp.totVenteHt  ?? '0,00');
-            } else {
+            } else {  // Imposition Tva ----------
                 ctx.totState.imputAcomp0  = '3';
                 if (fAcomp.total) {
                     const arrAcompte = fAcomp.total.split('|');
@@ -128,7 +128,7 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
             ctx.totState.acompteId0 = fAcomp.id;
         }
     }
-    // ── Imputation Acompte Franchise TVA ──────────────────────────
+    // ── Franchise Tva : Imputation de l'Acompte sur les Totaux Finaux ──────────────────────────
     if (newFacture.refDevis && ctx.totState.imputAcomp0 === '2') {
         ctx.totState.totBrutTtc0 = String(newFacture.totTtc ?? '0,00');
         const brut  = parseFloat(String(ctx.totState.totBrutTtc0).replace(',', '.'));
@@ -137,7 +137,7 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
             newFacture.totTtc = (brut - acomp).toFixed(2).replace('.', ',') as unknown as number | null;
         }
     }
-    // ── Imputation Acompte TVA ────────────────────────────────────
+    // ── Imposition Tva : Imputation de l'Acompte sur les lignes de totalisation  ────────────────────────
     let totPresta = 0;
     let totVente  = 0;
     if (newFacture.refDevis && ctx.totState.imputAcomp0 === '3') {

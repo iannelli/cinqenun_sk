@@ -7,7 +7,6 @@
     import { type Abonne, parseStatut }                     from '$lib/schemas/abonne';
     import { type Affaire, AffaireFormSchema }              from '$lib/schemas/affaire';
     import { type Facture, createFactureTotauxState }       from '$lib/schemas/facture';
-    import type { Client }                                  from '$lib/schemas/client';
     import { createRecetteVide }                            from '$lib/schemas/recette';
     import { prepareUpdateAffaire, checkAffaireSupprimable} from '$lib/components/affaire/AffairePage.utils';
     import { deleteFacture, annulationFacture, type SupprAnnulContext, type AnnulationSituation } from '$lib/components/facture/FactureSupprAnnul.utils';
@@ -231,11 +230,7 @@
                 }
                 break;
             case 20 : // Facture d'Acompte ----
-                if (f.statutCode == 1) { // Facture Annulée
-                    retour = false;
-                } else {
-                    retour = true;
-                }
+                retour = false;
                 break;
             case 30 : // Facture ----
                 if (f.statutCode == 1) { // Facture Annulée
@@ -246,52 +241,19 @@
                 }
                 if (f.statutCode == 21) { // Facture Réglée
                     retour = false;
-                    const str = (data.client as Client | null)?.credit ?? ''; // data.client est le client de l'affaire (affaireRaw.clientId)
-                    if (str !== '') {
-                        const lignes = str.split('|');
-                        for (const ligne of lignes) {
-                            const cells = ligne.split('#');
-                            const arr2  = (cells[3] ?? '').split('*').filter(Boolean);
-                            let nature  = '';
-                            for (let a = 0; a < arr2.length; a += 4) {
-                                nature = arr2[a] ?? '';
-                            }
-                            if ( nature === 'remboursement' || nature === 'annulation Remboursement' || nature === 'remboursement Excédent' ) { retour = true }
-                        }
-                    }
                 }
                 if (f.statutCode == 22) { // Facture Réglée avec excédent
+                    retour = false;
+                }
+                if (f.statutCode > 22 && f.statutCode < 28) { // Facture Validée en Instance d'Encaissement ou Facture Réglée partiellement
                     retour = true;
                 }
-                if (f.statutCode > 22 && f.statutCode < 27) { // Facture Validée en Instance d'Encaissement
-                    retour = true;
-                }
-                if (f.statutCode == 27) { // Facture Réglée partiellement
-                    if (f.statut.includes('Débit')) {
-                        retour = false;
-                    } else {
-                        retour = true;
-                    }
+                if (f.statutCode == 28) { // Facture à Annuler (Perte de la Franchise Tva)
+                    retour = false;
                 }
                 break;
             case 40: { // Facture d'Avoir ----
-                const str = (data.client as Client | null)?.credit ?? ''; //data.client est le client de l'affaire (affaireRaw.clientId)
-                if (str === '') {
-                    retour = false;
-                } else {
-                    const lignes = str.split('|');
-                    for (const ligne of lignes) {
-                        const cells = ligne.split('#');
-                        const arr2  = (cells[3] ?? '').split('*').filter(Boolean);
-                        let nature  = '';
-                        for (let a=0; a < arr2.length; a+=4) {
-                            nature = arr2[a] ?? '';
-                        }
-                        if ( nature === 'annulation Facture'|| nature === 'remboursement' || nature === 'annulation Remboursement' ) {
-                            retour = true;
-                        }
-                    }
-                }
+                retour = false;
             }
         };
         return retour;
