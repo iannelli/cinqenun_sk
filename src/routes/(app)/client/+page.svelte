@@ -3,6 +3,7 @@
     import { invalidate } from '$app/navigation';
     import { superForm, type SuperValidated, type Infer } from 'sveltekit-superforms';
     import { type Client, ClientFormSchema } from '$lib/schemas/client';
+    import { parseCredit, parseDebit, type CreditMouvement } from '$lib/schemas/client';
     import ModalConfirm from '$lib/components/ModalConfirm.svelte';
     import ModalAlerte from '$lib/components/ModalAlerte.svelte';
     import type { ActionResult } from '@sveltejs/kit';
@@ -112,6 +113,24 @@
     let bandeauVisible = $state(false);
     let bandeauMessage = $state('');
 
+    // ─── Compte Client ───────────────────────────────────────────
+    let compteDialog   = $state<HTMLDialogElement | null>(null);
+    let rembDialog     = $state<HTMLDialogElement | null>(null);
+    let barDialog      = $state<HTMLDialogElement | null>(null);
+    let clientCompte   = $state<Client | null>(null);
+    let activeTab      = $state<'credit' | 'debit'>('credit');
+    // Remboursement
+    let rembRefFac     = $state('');
+    let rembSoldeMax   = $state('');
+    let rembMontant    = $state('');
+    let rembDate       = $state('');
+    let rembErrors     = $state<string[]>([]);
+    let rembSubmitting = $state(false);
+    // Annulation remboursement
+    let barRefFac      = $state('');
+    let barVBar        = $state(0);
+    let barSubmitting  = $state(false);
+
     // ─── Gestion modale client ───────────────────────────────────
     function afficherBandeauErreur(errors: Record<string, unknown>): void {
         const msgs = Object.values(errors)
@@ -205,6 +224,81 @@
             return () => clearTimeout(timer);
         }
     });
+
+    // ─── Helpers compte ───────────────────────────────────────────
+    function parseFrLocal(val: string): number {
+        return parseFloat(val.replace(/\s/g, '').replace(',', '.')) || 0;
+    }
+    function formatDateFr(dateStr: string): string {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}/${m}/${y}`;
+    }
+    function calcVBar(mouvements: CreditMouvement[]): number {
+        return mouvements
+            .filter(m => m.nature0 === 'remboursement' || m.nature0 === 'annulation remboursement')
+            .reduce((acc, m) => acc + parseFrLocal(m.montant0), 0);
+    }
+    // ─── Gestion modale compte ────────────────────────────────────
+    function openCompteModal(client: Client) {
+        clientCompte = { ...client };
+        activeTab    = 'credit';
+        compteDialog?.showModal();
+    }
+    function closeCompteModal() {
+        compteDialog?.close();
+        clientCompte = null;
+    }
+    function openRembModal(refFac: string, soldeMax: string) {
+        rembRefFac   = refFac;
+        rembSoldeMax = soldeMax;
+        rembMontant  = '';
+        rembDate     = '';
+        rembErrors   = [];
+        rembDialog?.showModal();
+    }
+    function openBarModal(refFac: string, vBar: number) {
+        barRefFac = refFac;
+        barVBar   = vBar;
+        barDialog?.showModal();
+    }
+    // ─── Submit remboursement ─────────────────────────────────────
+    async function submitRemboursement() {
+        rembErrors = [];
+        if (!rembMontant.trim()) rembErrors.push('Le montant est obligatoire.');
+        if (!rembDate.trim())    rembErrors.push('La date est obligatoire.');
+
+        if (!rembErrors.length) {
+            const montantNum = parseFrLocal(rembMontant);
+            const soldeNum   = parseFrLocal(rembSoldeMax);
+            if (montantNum <= 0)       rembErrors.push('Le montant doit être supérieur à 0.');
+            if (montantNum > soldeNum) rembErrors.push(`Le montant ne peut dépasser le solde (${rembSoldeMax}).`);
+        }
+        if (rembErrors.length) return;
+
+        rembSubmitting = true;
+        const fd = new FormData();
+        fd.append('clientId', String(clientCompte!.id));
+        fd.append('refFac0',  rembRefFac);
+        fd.append('montant',  rembMontant.trim());
+        fd.append('date',     formatDateFr(rembDate));
+
+        const resp = await fetch('?/rembourser', { method: 'POST', body: fd });
+        rembSubmitting = false;
+        if (resp.ok) { rembDialog?.close(); location.reload(); }
+    }
+    // ─── Submit annulation remboursement ──────────────────────────
+    async function submitBarConfirm() {
+        barSubmitting = true;
+        const fd = new FormData();
+        fd.append('clientId', String(clientCompte!.id));
+        fd.append('refFac0',  barRefFac);
+        fd.append('vBar',     String(barVBar));
+
+        const resp = await fetch('?/annulerRemboursement', { method: 'POST', body: fd });
+        barSubmitting = false;
+        if (resp.ok) { barDialog?.close(); location.reload(); }
+    }
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════
@@ -358,7 +452,7 @@
                 </thead>
                 <tbody>
                     {#if data.clients.length === 0}
-                        <tr><td colspan="9" class="empty-state">Aucun client trouvé.</td></tr>
+                        <tr><td colspan="10" class="empty-state">Aucun client trouvé.</td></tr>
                     {:else}
                         {#each data.clients as client (client.id)}
                             <tr class="sg-trSha">
@@ -372,6 +466,7 @@
                                 <td>{formatMontant(client.soldeCredit)}</td>
                                 <td class="sg-tdOverlay">
                                     <div class="sg-rowActions sg-rowActions--clients">
+                                        <button class="sg-btn" data-tooltip="Consulter le Compte Client" onclick={() => openCompteModal(client)}><img style="height:18px" src="/compte.png" alt=""/></button>
                                         <button class="sg-btn" data-tooltip="Consulter ou Mettre à jour ce Client" onclick={() => openUpdateModal(client)}><img style="height:18px" src="/pencil.png" alt=""/></button>
                                         <button class="sg-btn" data-tooltip="Supprimer ce Client" onclick={() => openDeleteModal(client)}><img style="height:18px" src="/trash.png" alt=""/></button>
                                     </div>
@@ -429,6 +524,173 @@
 </dialog>
 <ModalAlerte bind:visible={alerteVisible} titre={alerteTitre} message={alerteMessage} onclose={()=>alerteVisible=false}/>
 <ModalConfirm bind:visible={confirmDeleteVisible} titre="Suppression du Client" message="Êtes-vous sûr de vouloir supprimer le client <strong>« {clientToDelete?.libClient ?? ''} »</strong> ?<br>Cette action est irréversible." labelConfirm="Supprimer" onconfirm={()=>deleteClient()} onannuler={()=>clientToDelete=null}/>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODALE COMPTE CLIENT
+════════════════════════════════════════════════════════════════ -->
+<dialog bind:this={compteDialog} class="modal modal-compte">
+    <div class="modal-header">
+        <h2>Compte Client — {clientCompte?.libClient ?? ''}</h2>
+        <button class="modal-close" onclick={closeCompteModal}>✕</button>
+    </div>
+    <!-- Onglets -->
+    <div class="tabs">
+        <button type="button" class="tab {activeTab === 'credit' ? 'tab-active' : ''}" onclick={() => activeTab = 'credit'}>Compte Créditeur</button>
+        <button type="button" class="tab {activeTab === 'debit' ? 'tab-active' : ''}" onclick={() => activeTab = 'debit'}>Compte Débiteur</button>
+    </div>
+    <div class="tab-content">
+        <!-- ── Onglet Compte Créditeur ── -->
+        {#if activeTab === 'credit'}
+            {@const creditLignes = parseCredit(clientCompte?.credit) ?? []}
+            <div class="table-wrapper">
+                <table class="compte-table">
+                    <thead>
+                        <tr>
+                            <th title="Facture à l'Origine de l'Excédent">Facture Origine</th>
+                            <th class="col-montant" title="Solde potentiellement remboursable">Solde</th>
+                            <th>Nature</th>
+                            <th>Date</th>
+                            <th class="col-montant">Montant</th>
+                            <th>Facture Imputée</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each creditLignes as ligne (ligne.refFac0)}
+                            {@const vBar  = calcVBar(ligne.mouvements0)}
+                            {@const solde = parseFrLocal(ligne.solde0)}
+                            {@const nRows = ligne.mouvements0.length || 1}
+                            {#each ligne.mouvements0 as mouv, i (i)}
+                                <tr class:tr-first={i === 0}>
+                                    {#if i === 0}
+                                        <td rowspan={nRows} class="cell-ref" title="Facture à l'Origine de l'Excédent">{ligne.refFac0}</td>
+                                        <td rowspan={nRows} class="col-montant cell-solde" title="Solde potentiellement remboursable">{ligne.solde0}</td>
+                                    {/if}
+                                    <td>{mouv.nature0}</td>
+                                    <td>{mouv.date0}</td>
+                                    <td class="col-montant">{mouv.montant0}</td>
+                                    <td>{mouv.facImput0}</td>
+                                    {#if i === 0}
+                                        <td rowspan={nRows} class="cell-actions">
+                                            {#if solde > 0}
+                                            <button type="button" class="btn-remb" onclick={() => openRembModal(ligne.refFac0, ligne.solde0)} data-tooltip="Rembourser">
+                                                <span style="font-size:15px; font-weight:700">&#8364;</span> Rembourser
+                                            </button>
+                                            {/if}
+                                            {#if vBar < 0}
+                                            <button type="button" class="btn-bar" onclick={() => openBarModal(ligne.refFac0, vBar)} data-tooltip="Annuler le Remboursement">
+                                                <span style="font-size:17px">&#8634;</span> Annuler
+                                            </button>
+                                            {/if}
+                                        </td>
+                                    {/if}
+                                </tr>
+                            {/each}
+                            <tr class="tr-separator"><td colspan="7"></td></tr>
+                        {/each}
+                        <!-- Solde total -->
+                        <tr class="tr-total">
+                            <td colspan="2" class="col-montant">Solde total</td>
+                            <td colspan="5" class="col-montant">{formatMontant(clientCompte?.soldeCredit)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {/if}
+        <!-- ── Onglet Compte Débiteur ── -->
+        {#if activeTab === 'debit'}
+            {@const debitLignes = parseDebit(clientCompte?.debit) ?? []}
+            <div class="table-wrapper">
+                <table class="compte-table">
+                    <thead>
+                        <tr>
+                            <th title="Facture à l'Origine du Reste Dû">Facture Origine</th>
+                            <th class="col-montant">Solde</th>
+                            <th>Nature</th>
+                            <th>Date</th>
+                            <th class="col-montant">Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each debitLignes as ligne (ligne.refFac0)}
+                            {@const nRows = ligne.mouvements0.length || 1}
+                            {#each ligne.mouvements0 as mouv, i (i)}
+                                <tr class:tr-first={i === 0}>
+                                    {#if i === 0}
+                                        <td rowspan={nRows} class="cell-ref" title="Facture à l'Origine du Reste Dû">{ligne.refFac0}</td>
+                                        <td rowspan={nRows} class="col-montant cell-solde">{ligne.solde0}</td>
+                                    {/if}
+                                    <td>{mouv.nature0}</td>
+                                    <td>{mouv.date0}</td>
+                                    <td class="col-montant">{mouv.montant0}</td>
+                                </tr>
+                            {/each}
+                            <tr class="tr-separator"><td colspan="5"></td></tr>
+                        {/each}
+                        <!-- Solde total -->
+                        <tr class="tr-total">
+                            <td colspan="2" class="col-montant">Solde total</td>
+                            <td colspan="3" class="col-montant">{formatMontant(clientCompte?.soldeDebit)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {/if}
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick={closeCompteModal}>Fermer</button>
+    </div>
+</dialog>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODALE REMBOURSEMENT
+════════════════════════════════════════════════════════════════ -->
+<dialog bind:this={rembDialog} class="modal modal-remb">
+    <div class="modal-header">
+        <h2>Remboursement — {rembRefFac}</h2>
+        <button class="modal-close" onclick={() => rembDialog?.close()}>✕</button>
+    </div>
+    <div class="remb-body">
+        {#if rembErrors.length}
+            <div class="remb-errors">
+                {#each rembErrors as err, i (i)}<p>• {err}</p>{/each}
+            </div>
+        {/if}
+        <div class="form-group">
+            <label for="remb-montant">Montant à rembourser <span class="required">*</span></label>
+            <input id="remb-montant" type="text" placeholder="0,00" bind:value={rembMontant} />
+            <small>Maximum remboursable : <strong>{rembSoldeMax}</strong></small>
+        </div>
+        <div class="form-group">
+            <label for="remb-date">Date <span class="required">*</span></label>
+            <input id="remb-date" type="date" bind:value={rembDate} />
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick={() => rembDialog?.close()}>Annuler</button>
+        <button type="button" class="btn-submit" onclick={submitRemboursement} disabled={rembSubmitting}>{rembSubmitting ? 'En cours…' : 'Valider'}</button>
+    </div>
+</dialog>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODALE ANNULATION REMBOURSEMENT (confirmation)
+════════════════════════════════════════════════════════════════ -->
+<dialog bind:this={barDialog} class="modal modal-danger">
+    <div class="modal-header">
+        <h2>Annuler le Remboursement</h2>
+        <button class="modal-close" onclick={() => barDialog?.close()}>✕</button>
+    </div>
+    <p class="confirm-text">
+        Confirmer l'annulation du remboursement sur la facture
+        <strong>« {barRefFac} »</strong> pour un montant de
+        <strong>{formatMontant(-barVBar)}</strong> ?
+    </p>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick={() => barDialog?.close()}>Abandonner</button>
+        <button type="button" class="btn-delete-confirm" onclick={submitBarConfirm} disabled={barSubmitting}>{barSubmitting ? 'En cours…' : 'Confirmer'}</button>
+    </div>
+</dialog>
+
 <style>
     /* ── Layout principal de la page ── */
     .client-page {
@@ -602,5 +864,161 @@
     .btn-submit:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+    }
+    /* ── Modale compte (paysage) ── */
+    .modal-compte {
+        width: min(1100px, 96vw);
+        max-height: 90vh;
+    }
+    .modal-remb {
+        width: min(420px, 95vw);
+    }
+    /* ── Onglets ── */
+    .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e2e8f0;
+        padding: 0 1.5rem;
+        background: #f8fafc;
+    }
+    .tab {
+        padding: 0.65rem 1.4rem;
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #64748b;
+        cursor: pointer;
+        margin-bottom: -2px;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .tab:hover { color: #334155; }
+    .tab-active {
+        color: var(--color-primary, #2563eb);
+        border-bottom-color: var(--color-primary, #2563eb);
+    }
+    /* ── Contenu des onglets ── */
+    .tab-content {
+        padding: 1rem 1.5rem;
+        overflow-x: auto;
+    }
+    /* ── Table compte ── */
+    .compte-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+    }
+    .compte-table th {
+        padding: 0.55rem 0.75rem;
+        background: #f1f5f9;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 2px solid #e2e8f0;
+        text-align: left;
+        white-space: nowrap;
+    }
+    .compte-table td {
+        padding: 0.45rem 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+        vertical-align: middle;
+    }
+    .cell-ref {
+        font-weight: 700;
+        color: #1e293b;
+        vertical-align: top;
+        padding-top: 0.55rem;
+    }
+    .cell-solde {
+        font-weight: 700;
+        vertical-align: top;
+        padding-top: 0.55rem;
+    }
+    .cell-actions {
+        vertical-align: top;
+        padding-top: 0.45rem;
+        white-space: nowrap;
+    }
+    .tr-separator td {
+        padding: 0.2rem 0;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .tr-total td {
+        background: #f8fafc;
+        font-weight: 700;
+        color: #1e293b;
+        border-top: 2px solid #cbd5e1;
+        padding: 0.6rem 0.75rem;
+    }
+    .tr-first td { border-top: 1px solid #e2e8f0; }
+
+    /* ── Boutons Rembourser / Annuler Remb. ── */
+    .btn-remb {
+        display: block;
+        margin-bottom: 0.3rem;
+        padding: 0.25rem 0.65rem;
+        background: #eff6ff;
+        color: #2563eb;
+        border: 1px solid #bfdbfe;
+        border-radius: 5px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .btn-remb:hover { background: #dbeafe; }
+    .btn-bar {
+        display: block;
+        padding: 0.25rem 0.65rem;
+        background: #fff7ed;
+        color: #c2410c;
+        border: 1px solid #fed7aa;
+        border-radius: 5px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .btn-bar:hover { background: #ffedd5; }
+
+    /* ── Corps modale remboursement ── */
+    .remb-body {
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .remb-errors {
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        color: #dc2626;
+        font-size: 0.85rem;
+    }
+    .remb-errors p { margin: 0 0 0.25rem; }
+    .remb-errors p:last-child { margin: 0; }
+    .remb-body .form-group input {
+        padding: 0.55rem 0.75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        width: 100%;
+        box-sizing: border-box;
+        outline: none;
+        font-family: inherit;
+    }
+    .remb-body .form-group input:focus {
+        border-color: var(--color-primary, #2563eb);
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    }
+    .remb-body small {
+        font-size: 0.78rem;
+        color: #64748b;
+        margin-top: 0.2rem;
     }
 </style>

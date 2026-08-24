@@ -119,30 +119,56 @@
         if (!facture) return;
         // Contrôles spécifiques à la création d'une Facture Brouillon ----
         const estFactureBrouillon = (facture.refFac ?? '').slice(0, 2) === 'FB';
-        if (estFactureBrouillon && facture.refDevis) {
-            const dev = factures.find(f => f.codeType === 10 && f.refFac === facture!.refDevis);
-            if (dev && dev.acompTaux != null && String(dev.acompTaux) !== '') {
-                // Devis avec Acompte nonRéglé ----
-                if (dev.statutCode !== 20) {
-                    confirmMessageFb =
-                        `La 'Facture Brouillon' en cours de Création fait référence au devis <strong>${dev.refFac}</strong> dont l'Acompte n'a pas été encore Réglé.<br>` +
-                        `En conséquence, cette Facture ne sera pas imputée de cet Acompte.<br>` +
-                        `Confirmez-vous cette Création ?`;
-                    confirmVisibleFb = true;
-                    return; // ← suspend la validation, reprise via ModalConfirm
-                }
-                // Devis avec Acompte Réglé ----
-                if (dev.statutCode === 20) {
-                    const fa = factures.find(f => f.codeType === 20 && f.refFac === dev.refDevis);
-                    if (fa && fa.refPre !== facture!.refFac) {
-                        showAlert(
-                            'Information',
-                            `La 'Facture Brouillon' en cours de Création fait référence au Devis <strong>${dev.refFac}</strong> dont l'Acompte a déjà été imputé sur une autre Facture.<br>` +
-                            `En conséquence, cette Facture ne sera pas imputée de cet Acompte.`
-                        );
+        if (estFactureBrouillon) {
+            // Examiner si la "Facture Brouillon" est en relation avec un Devis (fb.refDevis == dev.refFac)
+            if (facture.refDevis) {
+                // Présence de relation : rechercher ce Devis
+                const dev = factures.find(f => f.codeType === 10 && f.refFac === facture!.refDevis);
+                if (!dev) { // Devis absent : dysfonctionnement applicatif ----
+                    showAlert(
+                        'Erreur applicative',
+                        `Anomalie détectée : le Devis <strong>${facture.refDevis}</strong> référencé par cette Facture Brouillon est introuvable.<br>` +
+                        `Merci de contacter le support technique.`
+                    );
+                } else {// Devis Présent mais dont l'Acompte est NON Réglé (statutCode !== 20)
+                    if (dev.acompTaux != null && String(dev.acompTaux) !== '' && dev.statutCode !== 20) {
+                        confirmMessageFb =
+                            `La 'Facture Brouillon' en cours de Création fait référence au devis <strong>${dev.refFac}</strong> dont l'Acompte n'a pas été encore Réglé.<br>` +
+                            `En conséquence, cette Facture ne sera pas imputée de cet Acompte.<br>` +
+                            `Confirmez-vous cette Création ?`;
+                        confirmVisibleFb = true;
+                        return; // ← suspend la validation, reprise via ModalConfirm
+                    }
+                    // Devis Présent : vérifier sa relation avec une Facture d'Acompte
+                    if (dev.refDevis) {
+                        //Présence de relation et Recherche de la Facture d'Acompte
+                        const fa = factures.find(f => f.codeType === 20 && f.refFac === dev.refDevis);
+                        if (!fa) {
+                            // Facture d'Acompte Absente : dysfonctionnement applicatif
+                            showAlert(
+                                'Erreur applicative',
+                                `Anomalie détectée : la Facture d'Acompte <strong>${dev.refDevis}</strong> référencée par le Devis <strong>${dev.refFac}</strong> est introuvable.<br>` +
+                                `Merci de contacter le support technique.`
+                            );
+                        } else {
+                            // Facture d'Acompte présente, Vérification de son utilisation
+                            if (fa.refPre && fa.refPre !== '') {
+                                // La Facture d'Acompte a déjà imputé sur une autre Facture
+                                showAlert(
+                                    'Information',
+                                    `La 'Facture Brouillon' en cours de Création fait référence au Devis <strong>${dev.refFac}</strong> dont l'Acompte a déjà été imputé sur une autre Facture.<br>` +
+                                    `En conséquence, cette Facture ne sera pas imputée de cet Acompte.`
+                                );
+                            } else { // fa.refPre vide/null 
+                                //l'Acompte peut être imputé sur cette "Facture Brouillon"
+                                facture.refPre = fa.refFac;   // ← Création de la Relation entre Facture Brouillon et la Facture d'Acompte
+                            }
+                        }
+                        //Sinon (dev.refDevis vide) : aucun affichage — cas géré implicitement par le if
                     }
                 }
             }
+            // Absence de relation (facture.refDevis vide) : aucun affichage — cas géré implicitement par le if externe
         }
         validerSuite();
     }

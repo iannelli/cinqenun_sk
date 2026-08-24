@@ -202,25 +202,26 @@
             fd.append('modeRegl',  recetteLocale.modeRegl);
             try {
                 const response = await fetch('/recette?/updateModeReglRecette', { method: 'POST', body: fd });
-                const result    = deserialize(await response.text());
+                const result   = deserialize(await response.text());
                 if (result.type === 'success') {
                     afficherBandeau("Mode de règlement mis à jour avec succès.", true, 3000);
-                    // ── Mise à jour locale de la liste des encaissements ──
                     rt.selRecettes = rt.selRecettes.map(r =>
                         r.id === recetteLocale.id
                             ? { ...r, modeRegl: recetteLocale.modeRegl }
                             : r
                     );
                     onrefresh();
+                    setTimeout(() => { onclose(); }, 2000);
                 } else {
                     afficherBandeau("Erreur lors de la mise à jour du mode de règlement.", false);
+                    setTimeout(() => { onclose(); }, 2000);
                 }
             } catch {
                 afficherBandeau("Erreur réseau lors de la mise à jour du mode de règlement.", false);
+                setTimeout(() => { onclose(); }, 2000);
             }
         } else {
-        // Saisie d'un encaissement ────────────────────────────────────────────────────
-            // ── Contrôles de saisie : cumulation des erreurs ------
+            // Saisie d'un encaissement ────────────────────────────────────────────────────
             const erreurs: string[] = [];
             if (!dateInputEncais) {
                 erreurs.push("La date d'encaissement est obligatoire.");
@@ -234,12 +235,11 @@
             if (erreurs.length > 0) {
                 afficherBandeau(erreurs.join('<br>'), false);
                 btnNonOk = false;
-                return;
+                return;   // ← pas de fermeture ici : erreurs de saisie, l'utilisateur doit corriger
             }
-            // ── Si Aucune erreur : poursuite du Traitement ───────
             bandeauVisible = false;
-            // Si EGALITE entre le montant saisi et le montant Dû[facture.acompMont ou facture.facSolde0] ────────────
             if (Number((rt.saisiAImputer0 ?? '0').replace(',', '.')) === Number((rt.facMontantDu0 ?? '0').replace(',', '.'))) {
+
                 // Devis : Encaissement du Règlement de l'Acompte ────────────
                 if (facture.codeType == 10) {
                     vuDivSaisieEncais = '';
@@ -252,43 +252,45 @@
                     const nouvelleFacture = createFactureVide();
                     afficherBandeau("⏳ Création en cours …", true, 60000);
                     document.body.style.cursor = 'wait';
-                    // ── Confection de l'occurrence de Recette relative au Règlement de l'Acompte
+
                     const { ok, recetteId } = await createFacAcompteRec(
                         1, facture, nouvelleFacture, recetteLocale, rt, abonne, 'Acompte',
                         (s) => { afficherBandeau(s.message, s.succes); },
                         (v) => { btnNonOk = v; }
                     );
                     document.body.style.cursor = 'default';
-                    if (!ok) return;
-                    // ── Mise à jour locale de l'UI -----
+
+                    if (!ok) {
+                        setTimeout(() => { onclose(); }, 2000);
+                        return;
+                    }
                     if (recetteId) recetteLocale.id = recetteId;
                     facture.statutCode = 20;
                     facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
                     rt.selRecettes     = [...rt.selRecettes, { ...recetteLocale }];
                     afficherBandeau("Encaissement enregistré avec succès.", true, 3000);
                     onrefresh();
+                    setTimeout(() => { onclose(); }, 2000);
                 }
                 // Création de la Recette relative au Règlement de la Facture ────────────
                 if (facture.codeType == 30) {
                     facture.statutCode = 21;
                     rt.facTotReglSav0 = numberToFrStr(facture.totRegl);
-                    // ── Choix du Type de Préparation pour la Création de l'Occurrence de Recette -----
-                    await typePreparation(); 
-                    // ── Actualisation éventuelle du Statut du Devis lié à cette Facture ----
+                    await typePreparation();
                     if (facture.refDevis) {
                         const devisLie = factures.find(f =>
                             f.refFac.slice(0, 1) === 'D' && f.statutCode !== 20 && f.refFac === facture.refDevis
                         );
                         if (devisLie) {
                             devisLie.statutCode = 20;
-                            devisLie.statut      = "<mark style='background:white;color:#0488fd'>Devis Signé";
+                            devisLie.statut     = "<mark style='background:white;color:#0488fd'>Devis Signé";
                             const fdDevisLie = new FormData();
                             fdDevisLie.append('factureId',  String(devisLie.id));
                             fdDevisLie.append('statutCode', String(devisLie.statutCode));
                             fdDevisLie.append('statut',     devisLie.statut);
                             try {
                                 const responseDevisLie = await fetch('?/updateStatutFacture', { method: 'POST', body: fdDevisLie });
-                                const resultDevisLie    = deserialize(await responseDevisLie.text());
+                                const resultDevisLie   = deserialize(await responseDevisLie.text());
                                 if (resultDevisLie.type !== 'success') {
                                     afficherBandeau("Erreur lors de la mise à jour du statut du Devis lié.", false);
                                 }
@@ -297,9 +299,12 @@
                             }
                         }
                     }
+                    setTimeout(() => { onclose(); }, 2000);
                 }
-            } else {// Si DIFFERENCE entre le montant Dû et le montant encaissé ────────────────────────
+            } else {
+                // Si DIFFERENCE entre le montant Dû et le montant encaissé ────────────────────────
                 afficheDiffSaisieEncais();
+                // ← pas de fermeture : ouvre un autre flux de saisie (répartition/écart), l'utilisateur doit continuer
             }
         }
     }
@@ -329,38 +334,47 @@
 
     // Confirmation de la Différence entre le montant saisi et le Montant Dû----
     async function confirmDiffSaisieEncais() {
-        vueDiffSaisieEncais = false;
-        vueDiffSaisieEncais = false;
+        vueDiffSaisieEncais = false;   // ← ligne dupliquée supprimée
         // DEVIS - FACTURE d'ACOMPTE : Constitution d'une occurrence de Recette -----
         if (facture.codeType == 10) {
-            const calSaisi  = Number((rt.saisiAImputer0 ?? '0').replace(',', '.'));
-            const calDu     = Number((rt.facMontantDu0  ?? '0').replace(',', '.'));
-            const coef      = calSaisi / calDu;
+            const calSaisi = Number((rt.saisiAImputer0 ?? '0').replace(',', '.'));
+            const calDu    = Number((rt.facMontantDu0  ?? '0').replace(',', '.'));
+            const coef     = calSaisi / calDu;
             rt.acompteMont0 = rt.saisiAImputer0;
             const nouvelleFacture = createFactureVide();
+            vuDivSaisieEncais = '';   // ← ajout : ferme la div de saisie
+            afficherBandeau("⏳ Création en cours …", true, 60000);
+            document.body.style.cursor = 'wait';
             const { ok, recetteId } = await createFacAcompteRec(
                 coef, facture, nouvelleFacture, recetteLocale, rt, abonne, 'Acompte',
-                (s) => { bandeauMessage = s.message; bandeauSucces = s.succes; bandeauVisible = s.visible; },
+                (s) => { afficherBandeau(s.message, s.succes); },
                 (v) => { btnNonOk = v; }
             );
-            if (!ok) return;
+            document.body.style.cursor = 'default';
+            if (!ok) {
+                setTimeout(() => { onclose(); }, 2000);
+                return;
+            }
             if (recetteId) recetteLocale.id = recetteId;
             facture.statutCode = 20;
             facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
-            rt.selRecettes     = [...rt.selRecettes, { ...recetteLocale }];
+            rt.selRecettes      = [...rt.selRecettes, { ...recetteLocale }];
             afficherBandeau("Encaissement enregistré avec succès.", true, 2000);
             onrefresh();
+            setTimeout(() => { onclose(); }, 2000);   // ← ajout
         }
+
         // FACTURE : Constitution d'une occurrence de Recette -----
         if (facture.codeType == 30) {
-            if (Number(rt.saisiAImputer0.replace(/[,]/, '.')) > Number(rt.facMontantDu0.replace(/[,]/, '.'))) { // Encaissement excédentaire : Montant saisi > Montant Dû ----
+            if (Number(rt.saisiAImputer0.replace(/[,]/, '.')) > Number(rt.facMontantDu0.replace(/[,]/, '.'))) {
                 facture.statutCode = 22;
-            } else { // Encaissement partiel : Montant saisi < Montant Dû ----
+            } else {
                 facture.statutCode = 27;
             }
-            await typePreparation(); // Choix du Type de Préparation pour la Création de l'Occurrence de Recette
+            await typePreparation();
+            setTimeout(() => { onclose(); }, 2000);   // ← ajout
         }
-    }
+    }   
 
     // Détermination du Type de Préparation pour la Création de l'Occurrence de Recette de la Facture (Facture d'Acompte non concernée)
     async function typePreparation() {

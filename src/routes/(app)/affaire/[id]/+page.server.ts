@@ -312,9 +312,10 @@ export const actions = {
                 codeType:      parseInt(String(fd.get('codeType')),   10),
                 refFac:        String(fd.get('refFac')),
                 refDevis:      fd.get('refDevis')      ? String(fd.get('refDevis'))                                : null,
+                refPre:        fd.get('refPre') ? String(fd.get('refPre'))                                         : null,
                 client:        fd.get('client')        ? String(fd.get('client'))                                  : null,
-                statutCode:    parseInt(String(fd.get('statutCode')), 10),
-                statut:        String(fd.get('statut')),
+                statutCode: parseInt(String(fd.get('statutCode')), 10) || 0,
+                statut:     fd.get('statut') ? String(fd.get('statut'))                                            : '',
                 regimeTva:     fd.get('regimeTva')     ? String(fd.get('regimeTva'))                               : null,
                 dateEmis:      new Date(String(fd.get('dateEmis'))),
                 typeDelai:     parseInt(String(fd.get('typeDelai')),  10),
@@ -385,7 +386,7 @@ export const actions = {
                     }
                 }
             }
-            
+
             // ─── I.2.3 — Imputation d'un excédent d'encaissement ───────────────────────
             // Rappel : une Facture Brouillon possède toujours totRegl = 0 — seule l'imputation affecte le solde
             const montantImputerSaisi = parseFloat(String(fd.get('montantImputerSaisi') ?? '0').replace(',', '.')) || 0;

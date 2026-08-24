@@ -45,15 +45,15 @@ async function traitementCredit(p: DebitCreditParams): Promise<void> {
     };
     // Désérialisation du champ credit
     const lignes = parseCredit(p.client.credit) ?? [];
-    // I.3 – Recherche de l'occurrence dont facRef0 === parRefFac
-    const idx = lignes.findIndex((l) => l.facRef0 === p.parRefFac);
+    // I.3 – Recherche de l'occurrence dont refFac0 === parRefFac
+    const idx = lignes.findIndex((l) => l.refFac0 === p.parRefFac);
     if (idx !== -1) {
         // I.3.1 – Occurrence trouvée : ajouter le mouvement
         lignes[idx].mouvements0.push(nouveauMouvement);
     } else {
         // I.3.2 – Occurrence non trouvée : créer une nouvelle ligne
         lignes.push({
-            facRef0:     p.parRefFac,
+            refFac0:     p.parRefFac,
             solde0:      '0,00',
             affaireId0:  p.parAffaireId,
             mouvements0: [nouveauMouvement],
@@ -90,15 +90,15 @@ async function traitementDebit(p: DebitCreditParams): Promise<void> {
     };
     // Désérialisation du champ debit
     const lignes = parseDebit(p.client.debit) ?? [];
-    // II.3 – Recherche de l'occurrence dont facRef0 === parRefFac
-    const idx = lignes.findIndex((l) => l.facRef0 === p.parRefFac);
+    // II.3 – Recherche de l'occurrence dont refFac0 === parRefFac
+    const idx = lignes.findIndex((l) => l.refFac0 === p.parRefFac);
     if (idx !== -1) {
         // II.3.1 – Occurrence trouvée : ajouter le mouvement
         lignes[idx].mouvements0.push(nouveauMouvement);
     } else {
         // II.3.2 – Occurrence non trouvée : créer une nouvelle ligne
         lignes.push({
-            facRef0:     p.parRefFac,
+            refFac0:     p.parRefFac,
             solde0:      '0,00',
             affaireId0:  p.parAffaireId,
             mouvements0: [nouveauMouvement],

@@ -48,7 +48,7 @@ export type Client = Omit<ClientRaw, 'soldeDebit' | 'soldeCredit'> & {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Champ `debit` — Stocké en ROW_SEP / éléments séparés par des '¤'
-// Format base de données : facRef0¤solde0¤affaireId0¤stringArray0|...
+// Format base de données : refFac0¤solde0¤affaireId0¤stringArray0|...
 // stringArray0 : groupes répétitifs de 3 [nature0, date0, montant0] séparés par '*' : nature0*date0*montant0*nature0*date0*montant0*...
 // Exemple : FAC001¤150,00¤3¤20,0¤Facture*01/06/2026*150,00*Règlement*15/06/2026*75,00
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export const debitMouvementSchema = z.object({
 });
 export type DebitMouvement = z.infer<typeof debitMouvementSchema>;
 export const debitLigneSchema = z.object({
-    facRef0:     z.string().default(''),
+    refFac0:     z.string().default(''),
     solde0:      z.string().default('0,00'),
     affaireId0:  z.number().int().default(0),
     mouvements0: z.array(debitMouvementSchema).default([]),
@@ -86,7 +86,7 @@ export function parseDebit(raw: string | null | undefined): Debit | null {
                 }));
             }
             return debitLigneSchema.parse({
-                facRef0:     cells[0] ?? '',
+                refFac0:     cells[0] ?? '',
                 solde0:      cells[1] ?? '0,00',
                 affaireId0:  parseInt(cells[2] ?? '0', 10),
                 mouvements0: mouvements,
@@ -104,7 +104,7 @@ export function serializeDebit(data: Debit): string {
             .flatMap((m) => [m.nature0, m.date0, m.montant0])
             .join(CELL_SEP_DEBIT);
         return [
-            ligne.facRef0,
+            ligne.refFac0,
             ligne.solde0,
             String(ligne.affaireId0),
             strArray,
@@ -114,19 +114,19 @@ export function serializeDebit(data: Debit): string {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Champ `credit` — Stocké en ROW_SEP / éléments séparés par des '#'/
-// Format base de données : facRef0#solde0#affaireId0#stringArray0|...
+// Format base de données : refFac0#solde0#affaireId0#stringArray0|...
 // stringArray0 : groupes répétitifs de 4 [nature0, date0, montant0, facImput0] séparés par '*' : nature0*date0*montant0*facImput0*nature0*date0*montant0*facImput0*...
 // Exemple : FAC001#250,00#3#Règlement*15/06/2026*250,00*FAC002
 // ─────────────────────────────────────────────────────────────────────────────
 export const creditMouvementSchema = z.object({
-    nature0:  z.string().default(''),
+    nature0:   z.string().default(''),
     date0:     z.string().default(''),
     montant0:  z.string().default('0,00'),
     facImput0: z.string().default(''),
 });
 export type CreditMouvement = z.infer<typeof creditMouvementSchema>;
 export const creditLigneSchema = z.object({
-    facRef0:     z.string().default(''),
+    refFac0:     z.string().default(''),
     solde0:      z.string().default('0,00'),
     affaireId0:  z.number().int().default(0),
     mouvements0: z.array(creditMouvementSchema).default([]),
@@ -154,7 +154,7 @@ export function parseCredit(raw: string | null | undefined): Credit | null {
                 }));
             }
             return creditLigneSchema.parse({
-                facRef0:     cells[0] ?? '',
+                refFac0:     cells[0] ?? '',
                 solde0:      cells[1] ?? '0,00',
                 affaireId0:  parseInt(cells[2] ?? '0', 10),
                 mouvements0: mouvements,
@@ -172,7 +172,7 @@ export function serializeCredit(data: Credit): string {
             .flatMap((m) => [m.nature0, m.date0, m.montant0, m.facImput0])
             .join(CELL_SEP_CREDIT);
         return [
-            ligne.facRef0,
+            ligne.refFac0,
             ligne.solde0,
             String(ligne.affaireId0),
             strArray,

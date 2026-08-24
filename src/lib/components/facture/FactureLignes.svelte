@@ -332,8 +332,9 @@
             "Commentaire":              '30'
         };
         const code       = codeNature[ligne.nature0] ?? '00';
-        const tauxNum    = parseFloat(String(ligne.tauxTva0).replace(',', '.')) || 0;
-        ligne.typeLig0   = String(tauxNum).padStart(4, '0') + code;
+        const tauxNum = parseFloat(String(ligne.tauxTva0).replace(',', '.')) || 0;
+        const tauxStr = tauxNum.toFixed(1).replace('.', ',').padStart(4, '0');
+        ligne.typeLig0 = tauxStr + code;
         const baseCalc   = parseFloat(String(ligne.baseHt0).replace(',', '.'))   || 0;
         const remCalc    = Number(ligne.pourRemise0) || 0;
         const remCalcStr = remCalc > 0 ? String(remCalc) : '0';

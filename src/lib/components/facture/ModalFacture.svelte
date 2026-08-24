@@ -146,33 +146,37 @@ function demanderConfirmationValidation(): void {
     }
 
     // ─── VALIDATION ───────────────────────────────────────────────────
-    async function valider():Promise<void> {
+    async function valider(): Promise<void> {
         if (enregistrement || !facture) return;
         vueConfirmValidation = false;
         enregistrement = true;
         try {
             const fd = new FormData();
             fd.append('factureId', String(facture.id));
-            const response = await fetch('?/validerFacture', { method:'POST', body:fd });
+            const response = await fetch('?/validerFacture', { method: 'POST', body: fd });
             const result   = deserialize(await response.text());
             if (result.type !== 'success') {
                 const msg = (result.type === 'failure' && (result.data as { message?: string })?.message) || 'La validation de la Facture a échoué';
                 throw new Error(String(msg));
             }
-            const refFac   = (result.data as { refFac?: string })?.refFac ?? '';
-            facture.refFac = refFac; // affiche le n° définitif dans la modale
+            const refFac    = (result.data as { refFac?: string })?.refFac ?? '';
+            facture.refFac  = refFac; // affiche le n° définitif dans la modale
             afficherBandeau(true, `Facture validée sous le n° ${refFac}`);
             factureEnregistree = true;
             onrefresh();
+            // ─── Fermeture automatique 2s après le succès ──────────────
+            setTimeout(() => { onclose(); }, 2000);
         } catch (erreur) {
             afficherBandeau(false, `Une erreur est survenue lors de la validation : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
+            // ─── Fermeture automatique 2s après l'échec ────────────────
+            setTimeout(() => { onclose(); }, 2000);
         } finally {
             enregistrement = false;
         }
     }
 
     // ─── ENREGISTRER ───────────────────────────────────────────────
-    async function enregistrer():Promise<void> {
+    async function enregistrer(): Promise<void> {
         if (enregistrement) return;
         vueConfirmEnregistrement = false;
         const isDevis = facture?.codeType === 10;
@@ -183,12 +187,12 @@ function demanderConfirmationValidation(): void {
             const clientRaw    = facture?.client ? parseClientFacture(facture.client) : null;
             const clientSerial = clientRaw ? serializeClientFacture(clientRaw) : '';
             fd.append('client',        clientSerial);
-            fd.append('regimeTva',     facture?.regimeTva            ?? '');
-            fd.append('typeDelai',     String(facture?.typeDelai     ?? 0));
-            fd.append('delai',         String(facture?.delai         ?? 0));
-            fd.append('dateEcheance',  facture?.dateEcheance         ?? '');
-            fd.append('ligne',         facture?.ligne                ?? '');
-            fd.append('total',         facture?.total                ?? '');
+            fd.append('regimeTva',     facture?.regimeTva     ?? '');
+            fd.append('typeDelai',     String(facture?.typeDelai   ?? 0));
+            fd.append('delai',         String(facture?.delai       ?? 0));
+            fd.append('dateEcheance',  facture?.dateEcheance  ?? '');
+            fd.append('ligne',         facture?.ligne         ?? '');
+            fd.append('total',         facture?.total         ?? '');
             fd.append('remTot',        String(facture?.remTot        ?? 0));
             fd.append('totTtc',        String(facture?.totTtc        ?? 0));
             fd.append('acompTaux',     String(facture?.acompTaux     ?? ''));
@@ -199,23 +203,24 @@ function demanderConfirmationValidation(): void {
             fd.append('montCli',       String(facture?.montCli       ?? 0));
             fd.append('solde',         String(facture?.solde         ?? 0));
             fd.append('soldePenalite', String(facture?.soldePenalite ?? 0));
-            fd.append('acompMont',     facture?.acompMont            ?? '');
+            fd.append('acompMont',     facture?.acompMont     ?? '');
             fd.append('acompteId',     String(totState.acompteId0    ?? 0));
-            let response:Response;
+            let response: Response;
             if (montantImputerSaisiValeur !== null && montantImputerSaisiValeur > 0) {
                 fd.append('montantImputerSaisi', String(montantImputerSaisiValeur));
             }
             if (mode === 'create') {
-                fd.append('codeType',   String(facture?.codeType     ?? 0));
-                fd.append('refFac',     facture?.refFac              ?? '');
-                fd.append('refDevis',   facture?.refDevis            ?? '');
-                // Détermination de statutCode et statut effectué côté serveur
+                fd.append('codeType',   String(facture?.codeType ?? 0));
+                fd.append('refFac',     facture?.refFac          ?? '');
+                fd.append('refDevis',   facture?.refDevis        ?? '');
+                fd.append('refPre',     facture?.refPre          ?? '');   // ← ajout
                 fd.append('dateEmis',   facture?.dateEmis ? new Date(facture.dateEmis).toISOString() : new Date().toISOString());
                 fd.append('clientId',   String(clientId));
-                response = await fetch('?/createFacture', { method:'POST', body:fd });
+                response = await fetch('?/createFacture', { method: 'POST', body: fd });
             } else {
                 fd.append('factureId', String(facture?.id ?? 0));
-                response = await fetch('?/updateFacture', { method:'POST', body:fd });
+                fd.append('refPre',    facture?.refPre ?? '');   // ← ajout
+                response = await fetch('?/updateFacture', { method: 'POST', body: fd });
             }
             if (!response.ok) {
                 let msgErreur = `Erreur HTTP ${response.status}`;
@@ -223,21 +228,24 @@ function demanderConfirmationValidation(): void {
                     const texte = await response.text();
                     const data  = JSON.parse(texte);
                     if (data?.message) msgErreur = data.message;
-                } catch {
-                    /* on garde le message par défaut */ 
-                }
+                } catch { /* on garde le message par défaut */ }
                 throw new Error(msgErreur);
             }
             // Message de Succès -----
             const msgSucces = isDevis
-                ? (mode === 'create' ? 'Création du Devis effectuée' : 'Modification du Devis effectuée')
+                ? (mode === 'create' ? 'Création du Devis effectuée'     : 'Modification du Devis effectuée')
                 : (mode === 'create' ? 'Création de la Facture effectuée' : 'Modification de la Facture effectuée');
             afficherBandeau(true, msgSucces);
             factureEnregistree = true;
             montantImputerSaisiValeur = null;
             onrefresh();
+            // ─── Fermeture automatique 2s après le succès ──────────────
+            setTimeout(() => { onclose(); }, 2000);
+
         } catch (erreur) {
-            afficherBandeau(false, `Une erreur est survenue lors de l'enregistrement : ${erreur instanceof Error ? erreur.message:String(erreur)}`);
+            afficherBandeau(false, `Une erreur est survenue lors de l'enregistrement : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
+            // ─── Fermeture automatique 2s après l'erreur ───────────────
+            setTimeout(() => { onclose(); }, 2000);
         } finally {
             enregistrement = false;
             document.body.style.cursor = '';

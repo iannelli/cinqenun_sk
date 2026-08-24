@@ -88,10 +88,10 @@
     );
     // Compteurs issus de abonne.nbrMontAffaire (mis à jour par traitement côté serveur)
     const nbrMontAffaireArray = $derived(parseNbrMontAffaire(data.abonne.nbrMontAffaire));
-    const ongletEnCourNb0     = $derived(nbrMontAffaireArray[3] + nbrMontAffaireArray[5]);   // '20x' + '30x'
+    const ongletEnCourNb0     = $derived(nbrMontAffaireArray[2] + nbrMontAffaireArray[4]);   // '20x' + '30x'
     const ongletAttenteNb0    = $derived(nbrMontAffaireArray[0] + nbrMontAffaireArray[1]);   // '00x' + '10x'
-    const ongletInactNb0      = $derived(nbrMontAffaireArray[7] + nbrMontAffaireArray[9]);   // '11a' + '11b'
-    const ongletSoldeNb0      = $derived(nbrMontAffaireArray[11] + nbrMontAffaireArray[13]); // '31a' + '31b'
+    const ongletInactNb0      = $derived(nbrMontAffaireArray[6] + nbrMontAffaireArray[8]);   // '11a' + '11b'
+    const ongletSoldeNb0      = $derived(nbrMontAffaireArray[10] + nbrMontAffaireArray[12]); // '31a' + '31b'
     // Liste filtrée selon l'onglet actif
     const affairesFiltrees = $derived.by((): Affaire[] => {
         switch (ongletCourant0) {

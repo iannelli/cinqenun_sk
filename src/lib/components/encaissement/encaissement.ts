@@ -37,141 +37,162 @@ export async function createFacAcompteRec(
     setBandeau:  (state: BandeauState) => void,
     setBtnNonOk: (val: boolean) => void,
 ): Promise<{ ok: boolean; recetteId?: number }> {
-    // ── 1. Confection des lignes de Totalisation + ventilTva ──────────────────
-    recette.ventilTva = '';
-    cumulPresta0 = 0;
-    cumulVente0  = 0;
-    calMontTva0  = 0;
-    const facTotalAcompteArray0: string[] = [];
+  
+    // ── 1. Confection des lignes de Totalisation ───────────────────────────
     const facTotalArray0 = (devis.total ?? '').split('|');
-    for (let i=0; i < facTotalArray0.length; i++) {
-        let lig = facTotalArray0[i];
-        const ligArray = lig.split('¤');
-        if (ligArray[0].slice(0, 2) != '00') {
-            const cal1  = ligArray[3].replace(/[,]/, '');
-            const cal2  = Number(cal1) * coef;
-            ligArray[2] = ((cal2 / 100).toFixed(2)).replace(/[.]/, ',');
-            if (ligArray[0].slice(4, 6) == '00') {
-                cumulVente0 += Number(cal2);
-            } else {
-                cumulPresta0 += Number(cal2);
-            }
+    type LigneCalc = { ligArray: string[]; montHtCents: number; montTvaCents: number; montTtcCents: number };
+    const lignesCalc: LigneCalc[] = [];
+    for (let i = 0; i < facTotalArray0.length; i++) {
+        const ligArray = facTotalArray0[i].split('¤');
+        if (ligArray[0].slice(4, 6) != '20') { // exclut les Débours
+            const cal1        = ligArray[3].replace(/[,]/, '');
+            const cal2         = Number(cal1) * coef;
+            const montHtCents  = Math.round(cal2);
+            ligArray[2] = ((montHtCents / 100).toFixed(2)).replace(/[.]/, ',');
             ligArray[3] = '';
             ligArray[4] = ligArray[2];
+            let montTvaCents = 0;
+            let montTtcCents: number;
             if (devis.regimeTva == 'B') {
                 const tauxTva = (ligArray[0].slice(0, 4)).replace(/[,]/, '.');
-                const montHt  = ligArray[4].replace(/[,]/, '');
-                const montTva = (Number(montHt) * Number(tauxTva)) / 100;
-                calMontTva0  += Number(montTva);
-                ligArray[5]   = ((montTva / 100).toFixed(2)).replace(/[.]/, ',');
-                const montTtc = Number(montHt) + Number(montTva);
-                ligArray[6]   = ((montTtc / 100).toFixed(2)).replace(/[.]/, ',');
+                montTvaCents  = Math.round((montHtCents * Number(tauxTva)) / 100);
+                ligArray[5]   = ((montTvaCents / 100).toFixed(2)).replace(/[.]/, ',');
+                montTtcCents  = montHtCents + montTvaCents;
+                ligArray[6]   = ((montTtcCents / 100).toFixed(2)).replace(/[.]/, ',');
             } else {
-                ligArray[5] = '0,00';
-                ligArray[6] = ligArray[4];
+                ligArray[5]  = '0,00';
+                ligArray[6]  = ligArray[4];
+                montTtcCents = montHtCents;
             }
-            lig = ligArray.join('¤');
-            facTotalAcompteArray0.push(lig);
+            lignesCalc.push({ ligArray, montHtCents, montTvaCents, montTtcCents });
+        }
+    }
+  
+    // ── Correction de l'arrondi : le reste est affecté à la DERNIÈRE ligne ──
+    if (lignesCalc.length > 0) {
+        const totalCibleCents  = Math.round((rtData.acompteMont0 ? Number(rtData.acompteMont0.replace(',', '.')) : 0) * 100);
+        const sommeLignesCents = lignesCalc.reduce((acc, l) => acc + l.montTtcCents, 0);
+        const diffCents        = totalCibleCents - sommeLignesCents;
+        if (diffCents !== 0) {
+            const derniere = lignesCalc[lignesCalc.length - 1];
             if (devis.regimeTva == 'B') {
-                const ventilLigne = ligArray[0].slice(0, 4) + '¤' + ligArray[2] + '¤' + ligArray[5];
-                if ((recette.ventilTva ?? '').length == 0) {
-                    recette.ventilTva = ventilLigne;
-                } else {
-                    recette.ventilTva += '|' + ventilLigne;
-                }
+                derniere.montTvaCents += diffCents;
+                derniere.ligArray[5]   = ((derniere.montTvaCents / 100).toFixed(2)).replace(/[.]/, ',');
+                derniere.montTtcCents += diffCents;
+                derniere.ligArray[6]   = ((derniere.montTtcCents / 100).toFixed(2)).replace(/[.]/, ',');
+            } else {
+                derniere.montHtCents  += diffCents;
+                derniere.montTtcCents += diffCents;
+                derniere.ligArray[4]   = ((derniere.montHtCents / 100).toFixed(2)).replace(/[.]/, ',');
+                derniere.ligArray[2]   = derniere.ligArray[4];
+                derniere.ligArray[6]   = derniere.ligArray[4];
             }
         }
     }
-    if (devis.regimeTva != 'B') {
-        recette.ventilTva = '00,0' + '¤' + (rtData.acompteMont0 ?? '0,00') + '¤' + '0,00';
-    }
-    facAcompte.total       = facTotalAcompteArray0.join('|');
-    facAcompte.totPrestaHt = Number((cumulPresta0 / 100).toFixed(2));
-    facAcompte.totVenteHt  = Number((cumulVente0  / 100).toFixed(2));
-
-    // ── 2. Initialisation des données de facAcompte ───────────────────────────
-    // Note : refFac, statutCode et statut sont calculés/fixés côté serveur
-    facAcompte.codeType       = 20;
-    facAcompte.refDevis       = devis.refFac;
-    facAcompte.refPre         = '';
-    facAcompte.client         = devis.client;
-    facAcompte.regimeTva      = devis.regimeTva;
-    facAcompte.dateEmis       = new Date();
-    facAcompte.typeDelai      = 0;
-    facAcompte.delai          = 0;
-    facAcompte.dateEcheance   = new Date().toLocaleDateString("fr-FR");
-    facAcompte.ligne          = '';
-    facAcompte.remTot         = 0;
-    facAcompte.totTtc         = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
-    facAcompte.acompTaux      = null;
-    facAcompte.acompMont      = '';
-    facAcompte.dateRegl       = recette.dateRegl ? recette.dateRegl.toLocaleDateString("fr-FR") : null;
-    facAcompte.imputCreCli    = 0;
-    facAcompte.totRegl        = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
-    facAcompte.montCli        = 0;
-    facAcompte.solde          = 0;
-    facAcompte.penalite       = '';
-    facAcompte.soldePenalite  = null;
-    facAcompte.clientId       = devis.clientId;
-    facAcompte.abonneId       = devis.abonneId;
-
-    // ── 3. Données calculées pour la Recette ──────────────────────────────────
-    recette.montHt  = ((cumulPresta0 + cumulVente0) / 100).toFixed(2).replace('.', ',');
-    recette.montTva = (calMontTva0 / 100).toFixed(2).replace('.', ',');
-
-    // ── 4. Création transactionnelle Facture + Recette via action serveur ──────
-    const fd = new FormData();
-    // Données Facture (refFac, statutCode, statut générés côté serveur)
-    fd.append('refDevis',      facAcompte.refDevis             ?? '');
-    fd.append('client',        facAcompte.client               ?? '');
-    fd.append('regimeTva',     facAcompte.regimeTva            ?? '');
-    fd.append('dateEmis',      facAcompte.dateEmis.toISOString());
-    fd.append('typeDelai',     String(facAcompte.typeDelai));
-    fd.append('delai',         String(facAcompte.delai));
-    fd.append('dateEcheance',  facAcompte.dateEcheance         ?? '');
-    fd.append('ligne',         facAcompte.ligne                ?? '');
-    fd.append('total',         facAcompte.total                ?? '');
-    fd.append('remTot',        String(facAcompte.remTot        ?? 0));
-    fd.append('totTtc',        String(facAcompte.totTtc        ?? 0));
-    fd.append('totPrestaHt',   String(facAcompte.totPrestaHt   ?? 0));
-    fd.append('totVenteHt',    String(facAcompte.totVenteHt    ?? 0));
-    fd.append('imputCreCli',   String(facAcompte.imputCreCli   ?? 0));
-    fd.append('totRegl',       String(facAcompte.totRegl       ?? 0));
-    fd.append('montCli',       String(facAcompte.montCli       ?? 0));
-    fd.append('solde',         String(facAcompte.solde         ?? 0));
-    fd.append('soldePenalite', String(facAcompte.soldePenalite ?? 0));
-    fd.append('clientId',      String(facAcompte.clientId));
-    // Données Recette
-    fd.append('recDateEmis',   recette.dateEmis.toISOString());
-    fd.append('recDateRegl',   recette.dateRegl?.toISOString() ?? new Date().toISOString());
-    fd.append('cliNom',        recette.cliNom);
-    fd.append('libelle',       recette.libelle);
-    fd.append('modeRegl',      recette.modeRegl);
-    fd.append('montRegl',      rtData.acompteMont0             ?? '0,00');
-    fd.append('montHt',        recette.montHt                  ?? '0,00');
-    fd.append('ventilTva',     recette.ventilTva               ?? '');
-    fd.append('montTva',       recette.montTva                 ?? '0,00');
-    fd.append('montTtc',       rtData.acompteMont0             ?? '0,00');
-    fd.append('debours',       recette.debours                 ?? '0,00');
-    fd.append('penalite',      recette.penalite                ?? '0,00');
-    fd.append('nature',        nature);
-
-    try {
-        const response = await fetch('?/createFactureAcompteRecette', { method: 'POST', body: fd });
-        const result   = deserialize(await response.text());
-        if (result.type === 'success') {
-            const recetteId = (result.data as { recetteId?: number })?.recetteId;
-            return { ok:true, recetteId };
+  
+    // ── Sérialisation finale + construction de ventilTva ────────────────────
+    const facTotalAcompteArray0: string[] = [];
+    for (const l of lignesCalc) {
+        facTotalAcompteArray0.push(l.ligArray.join('¤'));
+        if (devis.regimeTva == 'B') {
+            const ventilLigne = l.ligArray[0].slice(0, 4) + '¤' + l.ligArray[2] + '¤' + l.ligArray[5];
+            recette.ventilTva = (recette.ventilTva ?? '').length == 0
+            ? ventilLigne
+            : recette.ventilTva + '|' + ventilLigne;
+        } else {
+            recette.ventilTva = '00,0' + '¤' + (rtData.acompteMont0 ?? '0,00') + '¤' + '0,00';
         }
-        setBandeau({ message:"Erreur lors de la création de la Facture d'Acompte et de l'Encaissement.", succes:false, visible:true });
-        setBtnNonOk(false);
-        return { ok:false };
-    } catch {
-        setBandeau({ message:"Erreur réseau lors de la création de la Facture d'Acompte et de l'Encaissement.", succes:false, visible:true });
-        setBtnNonOk(false);
-        return { ok:false };
     }
-}
+    facAcompte.total = facTotalAcompteArray0.join('|');
+  
+    // ── Duplication directe des sommes depuis les lignes (au lieu d'accumulateurs séparés) ──
+    const totVenteHtCents  = lignesCalc.filter(l => l.ligArray[0].slice(4, 6) == '00').reduce((acc, l) => acc + l.montHtCents, 0);
+    const totPrestaHtCents = lignesCalc.filter(l => l.ligArray[0].slice(4, 6) != '00').reduce((acc, l) => acc + l.montHtCents, 0);
+    const totTvaCents      = lignesCalc.reduce((acc, l) => acc + l.montTvaCents, 0);
+    facAcompte.totVenteHt  = Number((totVenteHtCents  / 100).toFixed(2));
+    facAcompte.totPrestaHt = Number((totPrestaHtCents / 100).toFixed(2));
+  
+    // ── 2. Initialisation des données de facAcompte ──────────────────────────
+    facAcompte.codeType     = 20;
+    facAcompte.refDevis     = devis.refFac;
+    facAcompte.refPre       = '';
+    facAcompte.client       = devis.client;
+    facAcompte.regimeTva    = devis.regimeTva;
+    facAcompte.dateEmis     = new Date();
+    facAcompte.typeDelai    = 0;
+    facAcompte.delai        = 0;
+    facAcompte.dateEcheance = new Date().toLocaleDateString("fr-FR");
+    facAcompte.ligne        = '';
+    facAcompte.remTot       = 0;
+    facAcompte.totTtc       = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
+    facAcompte.acompTaux    = null;
+    facAcompte.acompMont    = '';
+    facAcompte.dateRegl     = recette.dateRegl ? recette.dateRegl.toLocaleDateString("fr-FR") : null;
+    facAcompte.imputCreCli  = 0;
+    facAcompte.totRegl      = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
+    facAcompte.montCli      = 0;
+    facAcompte.solde        = 0;
+    facAcompte.penalite     = '';
+    facAcompte.soldePenalite = null;
+    facAcompte.clientId     = devis.clientId;
+    facAcompte.abonneId     = devis.abonneId;
+  
+    // ── 3. Duplication directe pour la Recette (au lieu de recalculer) ──────
+    recette.montHt  = ((totVenteHtCents + totPrestaHtCents) / 100).toFixed(2).replace('.', ',');
+    recette.montTva = (totTvaCents / 100).toFixed(2).replace('.', ',');
+    // recette.montTtc et recette.montRegl restent directement rtData.acompteMont0 (déjà le cas, voir §4)
+  
+    // ── 4. Création transactionnelle Facture + Recette via action serveur ───
+    const fd = new FormData();
+    fd.append('refDevis',    facAcompte.refDevis        ?? '');
+    fd.append('client',      facAcompte.client          ?? '');
+    fd.append('regimeTva',   facAcompte.regimeTva       ?? '');
+    fd.append('dateEmis',    facAcompte.dateEmis.toISOString());
+    fd.append('typeDelai',   String(facAcompte.typeDelai));
+    fd.append('delai',       String(facAcompte.delai));
+    fd.append('dateEcheance', facAcompte.dateEcheance    ?? '');
+    fd.append('ligne',       facAcompte.ligne           ?? '');
+    fd.append('total',       facAcompte.total           ?? '');
+    fd.append('remTot',      String(facAcompte.remTot      ?? 0));
+    fd.append('totTtc',      String(facAcompte.totTtc      ?? 0));
+    fd.append('totPrestaHt', String(facAcompte.totPrestaHt ?? 0));
+    fd.append('totVenteHt',  String(facAcompte.totVenteHt  ?? 0));
+    fd.append('imputCreCli', String(facAcompte.imputCreCli ?? 0));
+    fd.append('totRegl',     String(facAcompte.totRegl     ?? 0));
+    fd.append('montCli',     String(facAcompte.montCli     ?? 0));
+    fd.append('solde',       String(facAcompte.solde       ?? 0));
+    fd.append('soldePenalite', String(facAcompte.soldePenalite ?? 0));
+    fd.append('clientId',    String(facAcompte.clientId));
+    fd.append('recDateEmis', recette.dateEmis.toISOString());
+    fd.append('recDateRegl', recette.dateRegl?.toISOString() ?? new Date().toISOString());
+    fd.append('cliNom',      recette.cliNom);
+    fd.append('libelle',     recette.libelle);
+    fd.append('modeRegl',    recette.modeRegl);
+    fd.append('montRegl',    rtData.acompteMont0        ?? '0,00');
+    fd.append('montHt',      recette.montHt             ?? '0,00');
+    fd.append('ventilTva',   recette.ventilTva          ?? '');
+    fd.append('montTva',     recette.montTva            ?? '0,00');
+    fd.append('montTtc',     rtData.acompteMont0        ?? '0,00');
+    fd.append('debours',     recette.debours            ?? '0,00');
+    fd.append('penalite',    recette.penalite           ?? '0,00');
+    fd.append('nature',      nature);
+    try {
+      const response = await fetch('?/createFactureAcompteRecette', { method: 'POST', body: fd });
+      const result    = deserialize(await response.text());
+      if (result.type === 'success') {
+        const recetteId = (result.data as { recetteId?: number })?.recetteId;
+        return { ok: true, recetteId };
+      }
+      setBandeau({ message: "Erreur lors de la création de la Facture d'Acompte et de l'Encaissement.", succes: false, visible: true });
+      setBtnNonOk(false);
+      return { ok: false };
+    } catch {
+      setBandeau({ message: "Erreur réseau lors de la création de la Facture d'Acompte et de l'Encaissement.", succes: false, visible: true });
+      setBtnNonOk(false);
+      return { ok: false };
+    }
+  }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Encaissement INITIAL sur une Facture IMPOSABLE à la TVA (regimeTva == 'B')
