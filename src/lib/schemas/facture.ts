@@ -9,7 +9,7 @@
  *   ROW_SEP  = '|'   → sépare les lignes de Facturation et de Totalisation (1er niveau de `ligne`)
  *   CELL_SEP = '¤'   → sépare les rubriques d'une ligne (2e niveau de `ligne`) et les couples taux/montant de `acompMont` en régime TVA
  */
-import { z } from "zod";
+import { z }             from "zod";
 import { numberToFrStr } from '$lib/utils/format';
 
 // ─────────────────────────────────────────────────────────────────────────────

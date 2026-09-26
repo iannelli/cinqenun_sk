@@ -1,5 +1,5 @@
 import { confirmPendingRegistration } from '$lib/server/auth/email-token';
-import type { PageServerLoad } from './$types';
+import type { PageServerLoad }        from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
     const token = url.searchParams.get('token');

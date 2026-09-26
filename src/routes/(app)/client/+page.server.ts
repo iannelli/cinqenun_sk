@@ -1,10 +1,10 @@
-import { redirect, fail } from '@sveltejs/kit';
-import type { PageServerLoad, Actions } from './$types';
-import type { Prisma } from '@prisma/client';
-import { prisma } from '$lib/server/prisma';
-import { superValidate, message } from 'sveltekit-superforms';
-import { zod4 } from 'sveltekit-superforms/adapters';
-import { ClientFormSchema, CLIENT_SELECT, convertClientRawToClient } from '$lib/schemas/client';
+import { redirect, fail }                    from '@sveltejs/kit';
+import type { PageServerLoad, Actions }     from './$types';
+import type { Prisma }                       from '@prisma/client';
+import { prisma }                            from '$lib/server/prisma';
+import { superValidate, message }            from 'sveltekit-superforms';
+import { zod4 }                              from 'sveltekit-superforms/adapters';
+import { ClientFormSchema, CLIENT_SELECT, convertClientRawToClient, parseCredit, serializeCredit } from '$lib/schemas/client';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 function requireUser(locals: App.Locals) {
@@ -17,6 +17,13 @@ async function getOwnedClient(formData: FormData, userId: number) {
     const existing = await prisma.client.findFirst({ where: { id, abonneId: userId } });
     if (!existing) return { error: fail(404, { error: 'Client introuvable.' }) };
     return { id, existing };
+}
+// ─── Helpers compte client ────────────────────────────────────────
+function parseFrSrv(val: string): number {
+    return parseFloat(val.replace(/\s/g, '').replace(',', '.')) || 0;
+}
+function formatFrSrv(val: number): string {
+    return val.toFixed(2).replace('.', ',');
 }
 
 // ─── Load ────────────────────────────────────────────────────────
@@ -54,6 +61,7 @@ export const actions: Actions = {
             return message(form, 'Erreur serveur lors de la création.', { status: 500 });
         }
     },
+
     update: async ({ request, locals }) => {
         const user = requireUser(locals);
         const formData = await request.formData();
@@ -72,6 +80,7 @@ export const actions: Actions = {
         }
         return message(form, 'Client modifié avec succès.');
     },
+
     delete: async ({ request, locals }) => {
         const session = locals.session;
         if (!session) throw redirect(302, '/login');
@@ -80,5 +89,88 @@ export const actions: Actions = {
         if (isNaN(id)) return fail(400, { message: 'Identifiant invalide' });
         await prisma.client.delete({ where: { id } });
         return { success: true };
-    }
+    },
+
+    rembourser: async ({ request, locals }) => {
+        const user     = requireUser(locals);
+        const fd       = await request.formData();
+        const clientId = Number(fd.get('clientId'));
+        const refFac0  = String(fd.get('refFac0'));
+        const montant  = String(fd.get('montant')).trim();
+        const date     = String(fd.get('date')).trim();
+        const client   = await prisma.client.findFirst({ where: { id: clientId, abonneId: user.id } });
+        if (!client) return fail(404, { error: 'Client introuvable.' });
+        const lignes   = parseCredit(client.credit) ?? [];
+        const idx      = lignes.findIndex(l => l.refFac0 === refFac0);
+        if (idx === -1) return fail(404, { error: 'Facture introuvable.' });
+        // Ajout du mouvement (montant négatif)
+        lignes[idx].mouvements0.push({
+            nature0:   'remboursement',
+            date0:     date,
+            montant0:  '-' + formatFrSrv(parseFrSrv(montant)),
+            facImput0: '',
+        });
+        // Recalculer soldeRemb0
+        lignes[idx].soldeRemb0 = formatFrSrv(
+            lignes[idx].mouvements0
+                .filter(m => m.nature0 === 'remboursement' || m.nature0 === 'annulation remboursement')
+                .reduce((acc, m) => acc + parseFrSrv(m.montant0), 0)
+        );
+        // Recalculer solde0
+        lignes[idx].solde0 = formatFrSrv(
+            lignes[idx].mouvements0.reduce((acc, m) => acc + parseFrSrv(m.montant0), 0)
+        );
+        // Recalculer soldeCredit global
+        const soldeCredit = lignes.reduce((acc, l) => acc + parseFrSrv(l.solde0), 0);
+        await prisma.client.update({
+            where: { id: clientId },
+            data:  {
+                credit:      serializeCredit(lignes),
+                soldeCredit: formatFrSrv(soldeCredit),
+            },
+        });
+        return { success: true as const, action: 'rembourser' as const };
+
+    },
+
+    annulerRemboursement: async ({ request, locals }) => {
+        const user     = requireUser(locals);
+        const fd       = await request.formData();
+        const clientId = Number(fd.get('clientId'));
+        const refFac0  = String(fd.get('refFac0'));
+        const montant  = String(fd.get('montant')).trim();
+        const date     = String(fd.get('date')).trim();
+        const client   = await prisma.client.findFirst({ where: { id: clientId, abonneId: user.id } });
+        if (!client) return fail(404, { error: 'Client introuvable.' });
+        const lignes   = parseCredit(client.credit) ?? [];
+        const idx      = lignes.findIndex(l => l.refFac0 === refFac0);
+        if (idx === -1) return fail(404, { error: 'Facture introuvable.' });
+        // Ajout du mouvement (montant positif saisi par l'utilisateur)
+        lignes[idx].mouvements0.push({
+            nature0:   'annulation remboursement',
+            date0:     date,
+            montant0:  formatFrSrv(parseFrSrv(montant)),
+            facImput0: '',
+        });
+        // Recalculer soldeRemb0
+        lignes[idx].soldeRemb0 = formatFrSrv(
+            lignes[idx].mouvements0
+                .filter(m => m.nature0 === 'remboursement' || m.nature0 === 'annulation remboursement')
+                .reduce((acc, m) => acc + parseFrSrv(m.montant0), 0)
+        );
+        // Recalculer solde0
+        lignes[idx].solde0 = formatFrSrv(
+            lignes[idx].mouvements0.reduce((acc, m) => acc + parseFrSrv(m.montant0), 0)
+        );
+        // Recalculer soldeCredit global
+        const soldeCredit = lignes.reduce((acc, l) => acc + parseFrSrv(l.solde0), 0);
+        await prisma.client.update({
+            where: { id: clientId },
+            data:  {
+                credit:      serializeCredit(lignes),
+                soldeCredit: formatFrSrv(soldeCredit),
+            },
+        });
+        return { success: true as const, action: 'annulerRemboursement' as const };
+    },
 };

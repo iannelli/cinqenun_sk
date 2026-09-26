@@ -1,13 +1,13 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { invalidate } from '$app/navigation';
+    import { onMount }                                    from 'svelte';
+    import { invalidate }                                 from '$app/navigation';
     import { superForm, type SuperValidated, type Infer } from 'sveltekit-superforms';
-    import { type FiscaliteFormSchema } from '$lib/schemas/abonne';
-    import ModalAlerte from '$lib/components/ModalAlerte.svelte';
-    import type { ActionResult } from '@sveltejs/kit';
-    import { drawerInfoUtils } from '$lib/utils/drawerInfo';
-    import { infoReprise }     from '$lib/utils/messageInfo';
-    import { fade } from "svelte/transition";
+    import type {  FiscaliteFormSchema }                  from '$lib/schemas/abonne';
+    import ModalAlerte                                    from '$lib/components/ModalAlerte.svelte';
+    import type { ActionResult }                          from '@sveltejs/kit';
+    import { drawerInfoUtils }                            from '$lib/utils/drawerInfo';
+    import { infoReprise }                                from '$lib/utils/messageInfo';
+    import { fade }                                       from "svelte/transition";
 
     let mounted = $state(false);
     onMount(() => {
@@ -39,6 +39,7 @@
         drawerInfoUtils.ouvrir({
             titre:   "Saisie des Chiffres d'Affaire réalisés hors Cinqenun",
             message: infoReprise,
+            largeur: '500px',
         });
     }
 
@@ -78,9 +79,9 @@
             const typeActivite0 = fd.get('typeActivite0')?.toString() ?? '';
             const dateDebActiv0 = fd.get('dateDebActiv0')?.toString() ?? '';
             const statutFiscal0 = fd.get('statutFiscal0')?.toString() ?? '';
-            const impotIr0 = fd.get('impotIr0')?.toString() ?? '';
-            const declaTva0 = fd.get('declaTva0')?.toString() ?? '';
-            const tvaIntra = fd.get('tvaIntra')?.toString() ?? '';
+            const impotIr0 =      fd.get('impotIr0')?.toString() ?? '';
+            const declaTva0 =     fd.get('declaTva0')?.toString() ?? '';
+            const tvaIntra =      fd.get('tvaIntra')?.toString() ?? '';
             if (typeActivite0 === '') {
                 errs.push("Type d'Activité : veuillez sélectionner un type d'activité.");
             }
@@ -182,12 +183,7 @@
 </script>
 
 <!-- ─── POPUP D'ERREURS ──────────────────────────────────────── -->
-<ModalAlerte
-    bind:visible={alerteVisible}
-    titre={alerteTitre}
-    message={alerteMessage}
-    onclose={() => alerteVisible = false}
-/>
+<ModalAlerte bind:visible={alerteVisible} titre={alerteTitre} message={alerteMessage} onclose={()=>alerteVisible=false}/>
 
 <!-- ─── PAGE ─────────────────────────────────────────────────── -->
 {#if mounted}

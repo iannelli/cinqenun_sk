@@ -1,14 +1,13 @@
 
-import { fail, redirect } from '@sveltejs/kit';
-import type { RequestEvent } from '@sveltejs/kit';
-import { prisma } from '$lib/server/prisma';
-import { debitCreditClient } from '$lib/utils/debitCreditClient';
+import {type RequestEvent, fail, redirect }        from '@sveltejs/kit';
+import { prisma }                                  from '$lib/server/prisma';
+import { debitCreditClient }                       from '$lib/utils/debitCreditClient';
 import { CLIENT_SELECT, convertClientRawToClient } from '$lib/schemas/client';
 
 export const actions = {
     // ── Mise à jour du Mode de Règlement d'une Recette ───────────────────────
     updateModeReglRecette: async ({ request, locals }: RequestEvent) => {
-        const session = locals.session;
+        const session   = locals.session;
         if (!session) throw redirect(302, '/login');
         const fd        = await request.formData();
         const recetteId = parseInt(String(fd.get('recetteId')), 10);
@@ -61,17 +60,44 @@ export const actions = {
                 },
             });
             // ── 2. Mise à jour de la Facture ──────────────────────────────────
+            const montCliVal  = parseFloat(String(fd.get('montCli')  ?? '0').replace(',', '.'));
+            const soldeVal    = parseFloat(String(fd.get('solde')    ?? '0').replace(',', '.'));
+            let statutCode: number;
+            let statut: string;
+            if (montCliVal > 0) { // Encaissement excédentaire
+                statutCode = 22;
+                statut     = "<mark style='background:white;color:#0488fd'>Facture Réglée avec Excédent";
+            } else if (soldeVal <= 0) {// Facture Totalement Réglée
+                statutCode = 21;
+                statut     = "<mark style='background:white;color:#0488fd'>Facture Réglée";
+            } else { // Règlement partiel — le statut avec échéance sera recalculé par statutAffaireActive
+                statutCode = 27;
+                statut     = "<mark style='background:white;color:#66C909'>Facture Réglée partiellement";
+            }
             await prisma.facture.update({
                 where: { id: parseInt(String(fd.get('factureId')), 10) },
                 data: {
-                    dateRegl:      fd.get('dateRegl')      ? new Date(String(fd.get('dateRegl')))                          : null,
-                    totRegl:       fd.get('totRegl')       ? String(fd.get('totRegl')).replace(',', '.')                   : null,
-                    montCli:       fd.get('montCli')       ? String(fd.get('montCli')).replace(',', '.')                   : null,
-                    solde:         fd.get('solde')         ? String(fd.get('solde')).replace(',', '.')                     : null,
-                    soldePenalite: fd.get('soldePenalite') ? String(fd.get('soldePenalite')).replace(',', '.')             : null,
+                    dateRegl:      fd.get('dateRegl')      ? new Date(String(fd.get('dateRegl')))                       : null,
+                    totRegl:       fd.get('totRegl')       ? String(fd.get('totRegl')).replace(',', '.')                : null,
+                    montCli:       fd.get('montCli')       ? String(fd.get('montCli')).replace(',', '.')                : null,
+                    solde:         fd.get('solde')         ? String(fd.get('solde')).replace(',', '.')                  : null,
+                    soldePenalite: fd.get('soldePenalite') ? String(fd.get('soldePenalite')).replace(',', '.')          : null,
+                    statutCode,
+                    statut,
                 },
             });
-            // ── 3. Mise à jour du Compte Client si excédent ───────────────────
+            // ── 3. Mise à jour du statut de l'Affaire ────────────────────────
+            const affaireId = parseInt(String(fd.get('affaireId')), 10);
+            if (affaireId) {
+                await prisma.affaire.update({
+                    where: { id: affaireId },
+                    data: {
+                        statutCode: statutCode,
+                        statutLib:  statut,
+                    },
+                });
+            }
+            // ── 4. Mise à jour du Compte Client si excédent ───────────────────
             const montCli = String(fd.get('montCli') ?? '0,00');
             if (parseFloat(montCli.replace(',', '.')) > 0) {
                 const clientId = parseInt(String(fd.get('clientId')), 10);

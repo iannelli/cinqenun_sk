@@ -3,8 +3,8 @@ import { z } from 'zod';
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{10,}$/;
 
 export const ResetPasswordSchema = z.object({
-    tempPassword: z.string().min(1, 'Le mot de passe provisoire est obligatoire.'),
-    password: z.string().min(1, 'Le nouveau mot de passe est obligatoire.'),
+    tempPassword:    z.string().min(1, 'Le mot de passe provisoire est obligatoire.'),
+    password:        z.string().min(1, 'Le nouveau mot de passe est obligatoire.'),
     passwordConfirm: z.string().min(1, 'La confirmation est obligatoire.'),
 })
 .refine(d => passwordRegex.test(d.password), {
@@ -19,5 +19,5 @@ export const ResetPasswordSchema = z.object({
 })
 .refine(d => d.password === d.passwordConfirm, {
     message: 'Les 2 mots de passe doivent être identiques.',
-    path: ['passwordConfirm'],
+    path:    ['passwordConfirm'],
 });

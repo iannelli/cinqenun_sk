@@ -13,7 +13,6 @@ declare global {
                 email: string;
                 expiresAt: Date;
             };
-            statutAffaireActiveDone?: boolean;
         }
 	}
 }

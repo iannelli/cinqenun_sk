@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z }           from 'zod';
 import type { Prisma } from '@prisma/client';
 
 // ═════════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ export const FiscaliteFormSchema = z.object({
     versLib0:          z.boolean().default(false),
     facAnnul0:         z.string().default(''),
     // champs Prisma directs
-    tvaIntra: z.string().max(16, "Le N° TVA Intracommunautaire ne peut pas dépasser 16 caractères.").default(''),
+    tvaIntra:          z.string().max(16, "Le N° TVA Intracommunautaire ne peut pas dépasser 16 caractères.").default(''),
     temoinAsso:        z.boolean().default(false),
     reprise:           z.string().default('')
 });
@@ -237,29 +237,34 @@ export type AbonnementFormData = z.infer<typeof AbonnementFormSchema>;
 export function parseNbrMontAffaire(nbrMontAffaire: string | null | undefined): number[] {
     if (!nbrMontAffaire) return Array(14).fill(0);
     const p = nbrMontAffaire.split('|');
-    return Array.from({ length: 14 }, (_, i) => parseInt(p[i] ?? '0', 10) || 0);
+    return Array.from({ length: 14 }, (_, i) => {
+        const val = p[i] ?? '0';
+        // Index 0, 1 et pairs ≥ 2 : compteurs entiers
+        // Index impairs ≥ 3       : montants décimaux
+        if (i <= 2 || i % 2 === 0) return parseInt(val, 10)    || 0;
+        else                       return parseFloat(val.replace(',', '.')) || 0;
+    });
 }
 export function buildNbrMontAffaire(data: number[]): string {
     return data.map((v, i) => {
-        // Index 0, 1       : compteurs (nbre '00x' et nbre '10x')
-        // Index pairs ≥ 2  : compteurs (nbre situations '20x', '30x', '11a', '11b', '31a', '31b')
-        // Index impairs ≥ 3: montants réservés
-        if (i <= 1 || i % 2 === 0) return String(Math.round(v));
-        return v.toFixed(2).replace('.', ',');
+        // Index 0, 1 et pairs ≥ 2 : compteurs entiers
+        // Index impairs ≥ 3       : montants décimaux (réservés)
+        if (i <= 2 || i % 2 === 0) return String(Math.round(v));
+        else                       return v.toFixed(2).replace('.', ',');
     }).join('|');
 }
 
 // ═════════════════════════════════════════════════════════════════
-//  4. COMPTEURS SUIVI DU CHIFFRE d'AFFAIRE  (champ composite : suiviFac)
+//  4. COMPTEURS SUIVI DU CHIFFRE d'AFFAIRE de l'ABONNE (champ composite : suiviFac)
 // ═════════════════════════════════════════════════════════════════
-/** Désérialise abonne.suiviFac — Format : "nbr|mont|nbr|mont|..." (16 éléments) */
-export function parseSuiviFac(suiviFac:string | null | undefined):string[] {
-    if (!suiviFac) return Array(16).fill('0');
+/** Désérialise abonne.suiviFac — Format : "nbr|nbr|mont|nbr|mont|..." (17 éléments) */
+export function parseSuiviFacAbonne(suiviFac:string | null | undefined):string[] {
+    if (!suiviFac) return Array(17).fill('0');
     const p = suiviFac.split('|');
-    return Array.from({ length: 16 }, (_, i) => p[i] ?? '0');
+    return Array.from({ length: 17 }, (_, i) => p[i] ?? '0');
 }
-/** Resérialise le tableau suiviFac en chaîne "|" pour stockage en base. */
-export function buildSuiviFac(data:string[]):string {
+/** Re-Sérialise le tableau suiviFac en chaîne "|" pour stockage en base. */
+export function buildSuiviFacAbonne(data:string[]):string {
     return data.join('|');
 }
 

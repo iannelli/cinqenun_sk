@@ -53,18 +53,22 @@ export function dec(v: unknown): number | null {
 export function formatMontant(val: unknown): string {
     if (val == null || val === '') return '—';
     const n = typeof val === 'string'
-      ? parseFloat(val.replace(/[\s\u00A0\u202F]/g, '').replace(',', '.'))
-      : Number(val);
+        ? parseFloat(val.replace(/[\s\u00A0\u202F]/g, '').replace(',', '.'))
+        : Number(val);
     if (isNaN(n)) return '—';
     return n.toLocaleString('fr-FR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
     }).replace(/\u202F/g, '\u00A0');
 }
 
 /** Convertit un number Prisma (Decimal/float) en string format français '0,00' */
-export function numberToFrStr(val: number | null | undefined): string {
+export function numberToFrStr(val: number | string | null | undefined): string {
     if (val == null) return '0,00';
+    if (typeof val === 'string') {
+        const n = parseFloat(val.replace(',', '.'));
+        return isNaN(n) ? '0,00' : n.toFixed(2).replace('.', ',');
+    }
     return val.toFixed(2).replace('.', ',');
 }
 

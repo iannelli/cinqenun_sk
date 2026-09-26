@@ -16,16 +16,16 @@ export type SupprAnnulContext = {
 };
 export type DeleteSituation =
     | { type: 'devis-simple' }
-    | { type: 'devis-seul';   fbId: number }
-    | { type: 'devis-et-fb';  fbId: number }
+    | { type: 'devis-seul';              fbId: number }
+    | { type: 'devis-et-fb';             fbId: number }
     | { type: 'fb-simple' }
-    | { type: 'fb-avec-devis';      devId: number }
-    | { type: 'fb-avec-facAcompte'; faId: number };
+    | { type: 'fb-avec-devis';           devId: number }
+    | { type: 'fb-avec-facAcompte';      faId: number };
 export type AnnulationSituation =
     | { type: 'acompte-simple' }
-    | { type: 'acompte-avec-fb';           fbId: number }
+    | { type: 'acompte-avec-fb';         fbId: number }
     | { type: 'validee-simple' }
-    | { type: 'validee-avec-facAcompte';   faId: number };
+    | { type: 'validee-avec-facAcompte'; faId: number };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Suppression Devis / Facture Brouillon

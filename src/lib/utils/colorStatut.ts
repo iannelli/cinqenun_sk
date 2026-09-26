@@ -1,5 +1,4 @@
-/**  * Calcule la couleur et le statut d'une facture selon sa date d'échéance  */
-
+/**  Calcul de la couleur et du statut d'une Facture selon sa date d'échéance  */
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,16 +28,14 @@ function parseJJMMAAAA(dateStr: string): Date | null {
 // ─────────────────────────────────────────────────────────────────────────────
 // Fonction principale
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * Calcule la couleur HTML et le statut de la facture en fonction de la date d'échéance (format jj/mm/aaaa).
+/* Calcule la couleur HTML et le statut de la facture en fonction de la date d'échéance (format jj/mm/aaaa).
  * @param dateEcheanceStr    - Date d'échéance au format 'jj/mm/aaaa'
  * @param dateEcheanceSchema - Objet muté directement (date0, couleurHtml0)
- * @param facture            - Objet muté directement (statutCode, statut)
- */
+ * @param facture            - Objet muté directement (statutCode, statut) */
 export function colorStatut(
-    dateEcheanceStr: string,
+    dateEcheanceStr:    string,
     dateEcheanceSchema: DateEcheanceState,
-    facture: FactureStatutState
+    facture:            FactureStatutState
 ): void {
     // ── 1. Calcul du nombre de jours restants ─────────────────────
     const dateEch = parseJJMMAAAA(dateEcheanceStr);

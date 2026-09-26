@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z }           from 'zod';
 import type { Prisma } from '@prisma/client';
 
 // ─── Sélecteur Prisma ────────────────────────────────────────────
@@ -63,13 +63,13 @@ export function convertAffaireRawToAffaire(raw: AffaireRaw): Affaire {
     };
 }
 
-/** Désérialise affaire.suiviFac — Format : "nbr|nbr|mont|nbr|mont|..." (16 éléments) */
-export function parseSuiviFac(suiviFac: string | null | undefined): string[] {
+/** Désérialise affaire.suiviFac — Format : "nbr|mont|nbr|mont|..." (16 éléments) */
+export function parseSuiviFacAffaire(suiviFac: string | null | undefined): string[] {
     if (!suiviFac) return Array(16).fill('0');
     const p = suiviFac.split('|');
     return Array.from({ length: 16 }, (_, i) => p[i] ?? '0');
 }
 /** Resérialise le tableau suiviFac en chaîne "|" pour stockage en base. */
-export function buildSuiviFac(data: string[]): string {
+export function buildSuiviFacAffaire(data: string[]): string {
     return data.join('|');
 }

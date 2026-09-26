@@ -1,7 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { resolve } from '$app/paths';
-    import { fly } from 'svelte/transition';
+    import { fly }     from 'svelte/transition';
 
     let mounted = $state(false);
     onMount(() => { mounted = true; });

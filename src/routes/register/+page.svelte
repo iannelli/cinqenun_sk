@@ -1,24 +1,30 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import AuthForm from '$lib/components/AuthForm.svelte';
-
+  
     let { data } = $props();
   
     let waitingForConfirmation = $state(false);
     let pollingEmail = $state('');
     let pollingInterval: ReturnType<typeof setInterval> | null = null;
-  
+
     // Écouter le résultat de l'action (message de superforms)
     $effect(() => {
-        const formResult = $page.form;
-        const msg = formResult?.form?.message;
-        const email = formResult?.form?.data?.email;
+        const formResult = page.form;
+        const msg        = formResult?.form?.message;
+        const email      = formResult?.form?.data?.email;
         if (msg && typeof msg === 'string' && msg.includes('email de confirmation') && email) {
             waitingForConfirmation = true;
-            pollingEmail = email;
+            pollingEmail           = email;
             startPolling();
         }
     });
+
+    // Arrêt du polling si l'utilisateur quitte la page
+    $effect(() => {
+        return () => stopPolling();
+    });
+  
     function startPolling() {
         if (pollingInterval) return;
         pollingInterval = setInterval(async () => {
@@ -31,22 +37,21 @@
                 const result = await res.json();
                 if (result.confirmed) {
                     stopPolling();
-                    setTimeout(() => {
-                        window.location.href = `/abonne/identification?welcome=1&e=${btoa(pollingEmail)}`;
-                    }, 200);
+                    setTimeout(() => { window.location.href = `/abonne/identification?welcome=1&e=${btoa(pollingEmail)}`;}, 200);
                 }
             } catch {
-                // Silencieux, on réessaie au prochain tick
+            // Silencieux, on réessaie au prochain tick
             }
         }, 3000);
     }
+  
     function stopPolling() {
         if (pollingInterval) {
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
     }
-</script>
+  </script>
   
 {#if waitingForConfirmation}
     <div class="main">
@@ -59,9 +64,9 @@
             <p class="waiting-hint">En attente de confirmation…</p>
         </div>
     </div>
-    {:else}
-        <AuthForm mode="register" {data} />
-    {/if}
+{:else}
+    <AuthForm mode="register" {data} />
+{/if}
   
 <style>
     .main {

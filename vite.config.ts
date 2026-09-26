@@ -11,5 +11,19 @@ export default defineConfig({
     build: {
         target: 'esnext',
         cssMinify: true
-    }
+    },
+    optimizeDeps: {
+        include: [
+          '@tiptap/core',
+          '@tiptap/starter-kit',
+          '@tiptap/extension-text-style',
+          '@tiptap/extensions',
+          'pdfmake/build/pdfmake',
+          'pdfmake/build/vfs_fonts',
+          'pdf-lib',
+          'sveltekit-superforms',
+          'sveltekit-superforms/adapters',
+          'zod'
+        ]
+      }
 });

@@ -1,5 +1,5 @@
-import { prisma } from '$lib/server/prisma';
-import { hashPassword } from './password';
+import { prisma }        from '$lib/server/prisma';
+import { hashPassword }  from './password';
 import { createSession } from './session';
 
 // Inscription classique
@@ -9,7 +9,7 @@ export async function register(email: string, password: string) {
         data: {
             email,
             passwordHash: hashedPassword,
-            anFact: new Date().getFullYear().toString(),
+            anFact:       new Date().getFullYear().toString(),
         },
     });
     const session = await createSession(user.id);
@@ -22,7 +22,7 @@ export async function registerFromPending(email: string, hashedPassword: string)
         data: {
             email,
             passwordHash: hashedPassword,
-            anFact: new Date().getFullYear().toString(),
+            anFact:       new Date().getFullYear().toString(),
         },
     });
     const session = await createSession(user.id);

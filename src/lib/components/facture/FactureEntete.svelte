@@ -1,12 +1,12 @@
 <script lang="ts">
-    import type { Facture } from '$lib/schemas/facture';
-    import type { Affaire } from '$lib/schemas/affaire';
-    import ModalAlerte from '$lib/components/ModalAlerte.svelte';
-    import ModalConfirm from '$lib/components/ModalConfirm.svelte';
-    import { onlyNumeric, formatEntierInput } from '$lib/utils/numeric';
-    import { colorStatut, type FactureStatutState } from '$lib/utils/colorStatut';
-    import { libFacTypeDelai } from '$lib/utils/format';
-    import { drawerInfoUtils } from '$lib/utils/drawerInfo';
+    import  { type Facture, serializePenalite, parsePenalite } from '$lib/schemas/facture';
+    import  type { Affaire }                                   from '$lib/schemas/affaire';
+    import ModalAlerte                                         from '$lib/components/ModalAlerte.svelte';
+    import ModalConfirm                                        from '$lib/components/ModalConfirm.svelte';
+    import { onlyNumeric, formatEntierInput }                  from '$lib/utils/numeric';
+    import { colorStatut, type FactureStatutState }            from '$lib/utils/colorStatut';
+    import { libFacTypeDelai }  from '$lib/utils/format';
+    import { drawerInfoUtils }  from '$lib/utils/drawerInfo';
     import { penaReglement }    from '$lib/utils/messageInfo';
 
     let {
@@ -20,6 +20,7 @@
         devisOptions = [],
         factures = [],
         onAbandonner,
+        onModification,
     }: {
         facture   : Facture | null;
         affaire   : Affaire;
@@ -31,6 +32,7 @@
         devisOptions: string[];
         factures  : Facture[];
         onAbandonner: () => void;
+        onModification?: () => void;
     } = $props();
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -47,8 +49,6 @@
         { ind: 4, lib: "60 jours date émission" },
     ];
 
-    // Variable locale synchronisée avec facture.refDevis
-    const refDevisStr = $derived(facture?.refDevis ?? '');
     // Variables d'état réactif pour les champs dérivés (nommés *Schema par cohérence avec le template)
     let dateEcheanceSchema  = $state({ date0: '', couleurHtml0: '#000000' });
     let penaliteSchema      = $state({ typePenalite0: '' as number | '', montPenalite0: 0.00, indemForfait0: 0.00 });
@@ -74,22 +74,30 @@
         libDelai0 = libFacTypeDelai(facture.typeDelai, facture.delai);
         // ─── Initialisation legendTypeDelai ─────────────────────────────────
         if (facture.typeDelai && facture.typeDelai > 0) {
-            legendTypeDelai = typeDelaiLib.find(t => t.ind === facture!.typeDelai)?.lib
-                ?? 'Sélectionner un ...';
+            legendTypeDelai = typeDelaiLib.find(t => t.ind === facture!.typeDelai)?.lib ?? 'Sélectionner un ...';
+        }
+        // ─── Initialisation penaliteSchema depuis facture.penalite ──────────
+        if (facture.penalite) {
+            const parsed = parsePenalite(facture.penalite);
+            if (parsed) {
+                penaliteSchema.typePenalite0 = parsed.typePenalite0;
+                penaliteSchema.montPenalite0 = parseFloat(parsed.montPenalite0.replace(',', '.')) || 0;
+                penaliteSchema.indemForfait0 = parseFloat(parsed.indemForfait0.replace(',', '.')) || 0;
+            }
         }
     });
-
-    // ─── Modal d'Information ─────────────────────────────────────────
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Fonctions Utilisées  --------------------------------------------------------
+    // ───────────────────
+   // ─── Modal d'Information ─────────────────────────────────────────
     function modalInfo(): void {
         drawerInfoUtils.ouvrir({
             titre:   "Retard de Règlement : Types de Pénalités applicables",
             message: penaReglement,
+            largeur: '500px',
         });
     }
-
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Fonctions Utilisées  --------------------------------------------------------
-    // ───────────────────
     // ─── Date d'émission — format YYYY-MM-DD pour <input type="date"> ────
     function toInputDate(d: Date | string | undefined | null): string {
         if (!d) return new Date().toISOString().split('T')[0];
@@ -101,19 +109,20 @@
     $effect(() => {
         if (facture && dateEmisStr) {
             facture.dateEmis = new Date(dateEmisStr);
+            onModification?.();
         }
     });
     function updateDelai(e: Event) {
         if (!facture) return;
         facture.typeDelai = (e.target as HTMLSelectElement).selectedIndex;
         legendTypeDelai = "Type de délai sélectionné";
+        onModification?.();
     }
     function showAlert(titre: string, message: string): void {
         alerteTitre   = titre;
         alerteMessage = message;
         alerteVisible = true;
     }
-
     // Validation avant la Création d'un Devis ou d'une "Facture Brouillon" ───────────────────────────
     function valider() {
         if (!facture) return;
@@ -152,16 +161,16 @@
                             );
                         } else {
                             // Facture d'Acompte présente, Vérification de son utilisation
-                            if (fa.refPre && fa.refPre !== '') {
-                                // La Facture d'Acompte a déjà imputé sur une autre Facture
+                            if (fa.refPre && fa.refPre !== '' && fa.refPre !== facture.refFac) {
+                                // Réellement imputé sur une AUTRE facture
                                 showAlert(
                                     'Information',
                                     `La 'Facture Brouillon' en cours de Création fait référence au Devis <strong>${dev.refFac}</strong> dont l'Acompte a déjà été imputé sur une autre Facture.<br>` +
                                     `En conséquence, cette Facture ne sera pas imputée de cet Acompte.`
                                 );
-                            } else { // fa.refPre vide/null 
-                                //l'Acompte peut être imputé sur cette "Facture Brouillon"
-                                facture.refPre = fa.refFac;   // ← Création de la Relation entre Facture Brouillon et la Facture d'Acompte
+                            } else if (!fa.refPre || fa.refPre === '') {
+                                // Pas encore imputé : établir la liaison
+                                facture.refPre = fa.refFac;
                             }
                         }
                         //Sinon (dev.refDevis vide) : aucun affichage — cas géré implicitement par le if
@@ -219,7 +228,14 @@
         colorStatut(dateEcheanceSchema.date0, dateEcheanceSchema, facture as FactureStatutState);
         (facture as Record<string, unknown>).dateEcheance = dateEcheanceSchema.date0 + '|' + dateEcheanceSchema.couleurHtml0;
         dateEcheanceDate0 = dateEcheanceSchema.date0;
+        // ── Sérialisation de la Pénalité de Retard ─────────────────────
+        facture.penalite = serializePenalite({
+            typePenalite0: penaliteSchema.typePenalite0 === '' ? 0 : penaliteSchema.typePenalite0,
+            montPenalite0: Number(penaliteSchema.montPenalite0).toFixed(2).replace('.', ','),
+            indemForfait0: Number(penaliteSchema.indemForfait0).toFixed(2).replace('.', ','),
+        });
         etatEntete0 = 'table';
+        onModification?.();
     }
 
     // Calcul de la Date Limite ──────────────────
@@ -228,9 +244,7 @@
         function toSlash(date: Date | string | undefined | null): string {
             if (!date) return '';
             if (date instanceof Date) {
-                return String(date.getDate()).padStart(2, '0') + '/'
-                    + String(date.getMonth() + 1).padStart(2, '0') + '/'
-                    + date.getFullYear();
+                return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0') + '/' + date.getFullYear();
             }
             if (date.includes('-')) {
                 const [y, m, d] = date.split('-');
@@ -243,9 +257,7 @@
         function addDays(ds: string, jours: number): string {
             const [d, m, y] = ds.split('/').map(Number);
             const date = new Date(y, m - 1, d + jours);
-            return String(date.getDate()).padStart(2, '0') + '/'
-                + String(date.getMonth() + 1).padStart(2, '0') + '/'
-                + date.getFullYear();
+            return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0') + '/' + date.getFullYear();
         }
         let dateLimite = '';
         switch (facture.typeDelai) {
@@ -290,14 +302,15 @@
 </script>
 
 <div class="divTitre">
-    <div style="display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:13px;margin:0 3px;opacity:0.8">
+    <div style="position:relative;display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:14px;font-weight:600;margin:0 3px;opacity:0.8">
         <hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-right:5px"/>Données Générales<hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-left:5px"/>
+        <button class="btn-donnees-gen" title="Modifier les Données Générales" onclick={()=>etatEntete0='saisie'}>{dateEcheanceSchema.date0==='' ? 'Compléter les Données Générales':'Modifier les Données Générales'}</button>
     </div>
 </div>
 {#if facture} 
     <!--  TABLE D'AFFICHAGE des Données Saisie  =================================================   -->
     {#if etatEntete0 == 'table'} 
-        <table class="cssTable">
+        <table class="cssTable" style="margin-top:5px">
             <thead>
                 <tr>
                     <th>N° {action !== '' ? action : (facture?.codeType === 10 ? 'Devis' : 'Facture')}</th>
@@ -310,7 +323,6 @@
                     {#if facture.codeType ==30 && factureClientSchema.typeCli0 == 0} <!-- Si Facture et type de Client Professionnel -->
                         <th>Type de Pénalité</th>
                     {/if}
-                    <th style="width:30px"></th>
                 </tr>
             </thead>
             <tbody>
@@ -339,9 +351,6 @@
                             </span>
                         </td>
                     {/if}
-                    <td style="font-size:14px !important">
-                        <button class="sg-link" style="margin-top:-10px;font-weight:600" title="Modifier les Données Générales" onclick={()=>etatEntete0='saisie'}>{dateEcheanceSchema.date0==='' ? 'Compléter':'Modifier'}</button>
-                    </td>
                 </tr>
             </tbody>
         </table>
@@ -354,15 +363,20 @@
                         <legend style="font-size:11px"><span style="color:red">*&nbsp;</span>Date Emission</legend>
                         <input type="date" name="dateEmis" bind:value={dateEmisStr} style="height:30px;padding-top:2px;font-size:13px">
                     </div>
-                    {#if facture.codeType == 30 && affaire.devis && affaire.devis.length > 0} <!-- Facture : Choix d’un N° de Devis -->
+                    {#if facture.codeType == 30 && affaire.devis && affaire.devis.length > 0}
                         <div style="margin-top:20px;margin-left:10px">
                             <legend style="font-size:11px">Référence Devis</legend>
-                            <select class="sg-select" value={refDevisStr} onchange={(e)=>{ if (facture) facture.refDevis = (e.target as HTMLSelectElement).value}} style="width:120px;height:30px">
-                                <option value="" disabled hidden>Choisir ...</option>
-                                {#each [...new Set([...(facture?.refDevis ? [facture.refDevis] : []), ...devisOptions])] as devis (devis)}
-                                    <option value={devis}>{devis}</option>
-                                {/each}
-                            </select>
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <select class="sg-select" bind:value={facture.refDevis} style="width:125px;height:30px">
+                                    <option value="" disabled hidden>Choisir ...</option>
+                                    {#each [...new Set([...(facture?.refDevis ? [facture.refDevis] : []), ...devisOptions])] as devis (devis)}
+                                        <option value={devis}>{devis}</option>
+                                    {/each}
+                                </select>
+                                {#if facture.refDevis}
+                                <button type="button" onclick={()=>{ if(facture) facture.refDevis=''; onModification?.();}} class="btnDevisCroix" title="Enlever la Référence au Devis">✕</button>
+                                {/if}
+                            </div>
                         </div>
                     {/if}
                     <div style="margin-top:20px;margin-left:10px">
@@ -411,7 +425,7 @@
                             </button>
                         </div>
                     {/if}
-                    <button class="btnNormal" onclick={() => valider()} style="margin-top:34px;width:60px;height:30px">Valider</button>
+                    <button class="btn-submit" onclick={() => valider()} style="margin-top:34px;width:80px;height:30px">Enregistrer</button>
                 {/if}
             </div>
         </div>
@@ -455,10 +469,60 @@
         opacity: 1;
         font-size: 12px;
     }
+    .btn-donnees-gen {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        height: 25px;
+        max-height: 25px;
+        line-height: 1;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+        background: white;
+        color: #60A2F2;
+        border: 1px solid #60A2F2;
+        border-radius: 12px;
+        padding: 0 12px;
+        margin-top: -1px;
+        margin-right: 20px;
+        cursor: pointer;
+        text-decoration: none;
+        box-shadow: 2px 2px 4px rgba(0,0,0,0.25);
+        transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .btn-donnees-gen:hover {
+        background: #60A2F2;
+        color: white;
+        text-decoration: none;
+        box-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+    }
     .saisieEntete {
-        display:flex;
-        flex-direction:row;
-        justify-content:center;
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+    }
+    .btnDevisCroix {
+        height: 24px;
+        width: 24px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: #dc2626;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: -7px;
+        margin-right: -8px;
     }
     .td-pena {
         position: relative;
@@ -493,5 +557,25 @@
     }
     .pena-tooltip:hover .pena-tooltip-content {
         display: block;
+    }
+    .btn-submit {
+        /*padding: 0.5rem 1.3rem;*/
+        width: 160px;
+        height: 33px;
+        background: var(--color-primary, #93a8f0);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        /*font-weight: 600;*/
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .btn-submit:hover:not(:disabled) {
+        background: var(--color-primary-dark, #6e91f0);
+    }
+    .btn-submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 </style>

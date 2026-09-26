@@ -4,12 +4,14 @@ export type DrawerInfoState = {
     visible:  boolean;
     titre:    string;
     message:  string;
+    largeur:  string;
 };
 
 const initialState: DrawerInfoState = {
     visible: false,
     titre:   '',
     message: '',
+    largeur: '500px',
 };
 
 const { subscribe, update } = writable<DrawerInfoState>(initialState);

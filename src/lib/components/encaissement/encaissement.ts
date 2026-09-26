@@ -45,7 +45,7 @@ export async function createFacAcompteRec(
     for (let i = 0; i < facTotalArray0.length; i++) {
         const ligArray = facTotalArray0[i].split('¤');
         if (ligArray[0].slice(4, 6) != '20') { // exclut les Débours
-            const cal1        = ligArray[3].replace(/[,]/, '');
+            const cal1         = ligArray[3].replace(/[,]/, '');
             const cal2         = Number(cal1) * coef;
             const montHtCents  = Math.round(cal2);
             ligArray[2] = ((montHtCents / 100).toFixed(2)).replace(/[.]/, ',');
@@ -60,9 +60,9 @@ export async function createFacAcompteRec(
                 montTtcCents  = montHtCents + montTvaCents;
                 ligArray[6]   = ((montTtcCents / 100).toFixed(2)).replace(/[.]/, ',');
             } else {
-                ligArray[5]  = '0,00';
-                ligArray[6]  = ligArray[4];
-                montTtcCents = montHtCents;
+                ligArray[5]   = '0,00';
+                ligArray[6]   = ligArray[4];
+                montTtcCents  = montHtCents;
             }
             lignesCalc.push({ ligArray, montHtCents, montTvaCents, montTtcCents });
         }
@@ -113,29 +113,29 @@ export async function createFacAcompteRec(
     facAcompte.totPrestaHt = Number((totPrestaHtCents / 100).toFixed(2));
   
     // ── 2. Initialisation des données de facAcompte ──────────────────────────
-    facAcompte.codeType     = 20;
-    facAcompte.refDevis     = devis.refFac;
-    facAcompte.refPre       = '';
-    facAcompte.client       = devis.client;
-    facAcompte.regimeTva    = devis.regimeTva;
-    facAcompte.dateEmis     = new Date();
-    facAcompte.typeDelai    = 0;
-    facAcompte.delai        = 0;
-    facAcompte.dateEcheance = new Date().toLocaleDateString("fr-FR");
-    facAcompte.ligne        = '';
-    facAcompte.remTot       = 0;
-    facAcompte.totTtc       = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
-    facAcompte.acompTaux    = null;
-    facAcompte.acompMont    = '';
-    facAcompte.dateRegl     = recette.dateRegl ? recette.dateRegl.toLocaleDateString("fr-FR") : null;
-    facAcompte.imputCreCli  = 0;
-    facAcompte.totRegl      = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
-    facAcompte.montCli      = 0;
-    facAcompte.solde        = 0;
-    facAcompte.penalite     = '';
+    facAcompte.codeType      = 20;
+    facAcompte.refDevis      = devis.refFac;
+    facAcompte.refPre        = '';
+    facAcompte.client        = devis.client;
+    facAcompte.regimeTva     = devis.regimeTva;
+    facAcompte.dateEmis      = new Date();
+    facAcompte.typeDelai     = 0;
+    facAcompte.delai         = 0;
+    facAcompte.dateEcheance  = new Date().toLocaleDateString("fr-FR");
+    facAcompte.ligne         = '';
+    facAcompte.remTot        = 0;
+    facAcompte.totTtc        = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
+    facAcompte.acompTaux     = null;
+    facAcompte.acompMont     = '';
+    facAcompte.dateRegl      = recette.dateRegl ? recette.dateRegl.toLocaleDateString("fr-FR") : null;
+    facAcompte.imputCreCli   = 0;
+    facAcompte.totRegl       = rtData.acompteMont0 != null ? parseFloat(rtData.acompteMont0.replace(',', '.')) : null;
+    facAcompte.montCli       = 0;
+    facAcompte.solde         = 0;
+    facAcompte.penalite      = '';
     facAcompte.soldePenalite = null;
-    facAcompte.clientId     = devis.clientId;
-    facAcompte.abonneId     = devis.abonneId;
+    facAcompte.clientId      = devis.clientId;
+    facAcompte.abonneId      = devis.abonneId;
   
     // ── 3. Duplication directe pour la Recette (au lieu de recalculer) ──────
     recette.montHt  = ((totVenteHtCents + totPrestaHtCents) / 100).toFixed(2).replace('.', ',');
@@ -144,38 +144,38 @@ export async function createFacAcompteRec(
   
     // ── 4. Création transactionnelle Facture + Recette via action serveur ───
     const fd = new FormData();
-    fd.append('refDevis',    facAcompte.refDevis        ?? '');
-    fd.append('client',      facAcompte.client          ?? '');
-    fd.append('regimeTva',   facAcompte.regimeTva       ?? '');
-    fd.append('dateEmis',    facAcompte.dateEmis.toISOString());
-    fd.append('typeDelai',   String(facAcompte.typeDelai));
-    fd.append('delai',       String(facAcompte.delai));
-    fd.append('dateEcheance', facAcompte.dateEcheance    ?? '');
-    fd.append('ligne',       facAcompte.ligne           ?? '');
-    fd.append('total',       facAcompte.total           ?? '');
-    fd.append('remTot',      String(facAcompte.remTot      ?? 0));
-    fd.append('totTtc',      String(facAcompte.totTtc      ?? 0));
-    fd.append('totPrestaHt', String(facAcompte.totPrestaHt ?? 0));
-    fd.append('totVenteHt',  String(facAcompte.totVenteHt  ?? 0));
-    fd.append('imputCreCli', String(facAcompte.imputCreCli ?? 0));
-    fd.append('totRegl',     String(facAcompte.totRegl     ?? 0));
-    fd.append('montCli',     String(facAcompte.montCli     ?? 0));
-    fd.append('solde',       String(facAcompte.solde       ?? 0));
+    fd.append('refDevis',      facAcompte.refDevis             ?? '');
+    fd.append('client',        facAcompte.client               ?? '');
+    fd.append('regimeTva',     facAcompte.regimeTva            ?? '');
+    fd.append('dateEmis',      facAcompte.dateEmis.toISOString());
+    fd.append('typeDelai',     String(facAcompte.typeDelai));
+    fd.append('delai',         String(facAcompte.delai));
+    fd.append('dateEcheance',  facAcompte.dateEcheance         ?? '');
+    fd.append('ligne',         facAcompte.ligne                ?? '');
+    fd.append('total',         facAcompte.total                ?? '');
+    fd.append('remTot',        String(facAcompte.remTot        ?? 0));
+    fd.append('totTtc',        String(facAcompte.totTtc        ?? 0));
+    fd.append('totPrestaHt',   String(facAcompte.totPrestaHt   ?? 0));
+    fd.append('totVenteHt',    String(facAcompte.totVenteHt    ?? 0));
+    fd.append('imputCreCli',   String(facAcompte.imputCreCli   ?? 0));
+    fd.append('totRegl',       String(facAcompte.totRegl       ?? 0));
+    fd.append('montCli',       String(facAcompte.montCli       ?? 0));
+    fd.append('solde',         String(facAcompte.solde         ?? 0));
     fd.append('soldePenalite', String(facAcompte.soldePenalite ?? 0));
-    fd.append('clientId',    String(facAcompte.clientId));
-    fd.append('recDateEmis', recette.dateEmis.toISOString());
-    fd.append('recDateRegl', recette.dateRegl?.toISOString() ?? new Date().toISOString());
-    fd.append('cliNom',      recette.cliNom);
-    fd.append('libelle',     recette.libelle);
-    fd.append('modeRegl',    recette.modeRegl);
-    fd.append('montRegl',    rtData.acompteMont0        ?? '0,00');
-    fd.append('montHt',      recette.montHt             ?? '0,00');
-    fd.append('ventilTva',   recette.ventilTva          ?? '');
-    fd.append('montTva',     recette.montTva            ?? '0,00');
-    fd.append('montTtc',     rtData.acompteMont0        ?? '0,00');
-    fd.append('debours',     recette.debours            ?? '0,00');
-    fd.append('penalite',    recette.penalite           ?? '0,00');
-    fd.append('nature',      nature);
+    fd.append('clientId',      String(facAcompte.clientId));
+    fd.append('recDateEmis',   recette.dateEmis.toISOString());
+    fd.append('recDateRegl',   recette.dateRegl?.toISOString() ?? new Date().toISOString());
+    fd.append('cliNom',        recette.cliNom);
+    fd.append('libelle',       recette.libelle);
+    fd.append('modeRegl',      recette.modeRegl);
+    fd.append('montRegl',      rtData.acompteMont0             ?? '0,00');
+    fd.append('montHt',        recette.montHt                  ?? '0,00');
+    fd.append('ventilTva',     recette.ventilTva               ?? '');
+    fd.append('montTva',       recette.montTva                 ?? '0,00');
+    fd.append('montTtc',       rtData.acompteMont0             ?? '0,00');
+    fd.append('debours',       recette.debours                 ?? '0,00');
+    fd.append('penalite',      recette.penalite                ?? '0,00');
+    fd.append('nature',        nature);
     try {
       const response = await fetch('?/createFactureAcompteRecette', { method: 'POST', body: fd });
       const result    = deserialize(await response.text());
@@ -203,10 +203,10 @@ export function prepaRecetteInitTva(
     recette:  Recette,
     rtData:   RecetteTraitement,
 ): void {
-    const saisi        = parseFloat((rtData.saisiAImputer0  ?? '0').replace(',', '.'));
-    const montantDu    = parseFloat((rtData.facMontantDu0   ?? '0').replace(',', '.'));
-    const aFacturer    = parseFloat((rtData.facMontFacturer0 ?? '0').replace(',', '.'));
-    const facSolde     = parseFloat(String(facture.solde        ?? '0').replace(',', '.'));
+    const saisi        = parseFloat((rtData.saisiAImputer0       ?? '0').replace(',', '.'));
+    const montantDu    = parseFloat((rtData.facMontantDu0        ?? '0').replace(',', '.'));
+    const aFacturer    = parseFloat((rtData.facMontFacturer0     ?? '0').replace(',', '.'));
+    const facSolde     = parseFloat(String(facture.solde         ?? '0').replace(',', '.'));
     const facSoldePena = parseFloat(String(facture.soldePenalite ?? '0').replace(',', '.'));
     // ── II.1.1 – Détermination de l'opération ─────────────────────────────────
     const cal = saisi - montantDu;
@@ -312,10 +312,10 @@ export function prepaRecetteInitFranchise(
     recette.montTva  = '0,00';
     recette.penalite = '0,00';
     facture.montCli  = 0;
-    const saisi           = parseFloat((rtData.saisiAImputer0  ?? '0').replace(',', '.'));
-    const aFacturer       = parseFloat((rtData.facMontFacturer0 ?? '0').replace(',', '.'));
-    const montDebours     = parseFloat((rtData.facMontDebours0  ?? '0').replace(',', '.'));
-    const facSolde        = parseFloat(String(facture.solde        ?? '0').replace(',', '.'));
+    const saisi           = parseFloat((rtData.saisiAImputer0       ?? '0').replace(',', '.'));
+    const aFacturer       = parseFloat((rtData.facMontFacturer0     ?? '0').replace(',', '.'));
+    const montDebours     = parseFloat((rtData.facMontDebours0      ?? '0').replace(',', '.'));
+    const facSolde        = parseFloat(String(facture.solde         ?? '0').replace(',', '.'));
     const facSoldePena    = parseFloat(String(facture.soldePenalite ?? '0').replace(',', '.'));
     const montHorsDebours = aFacturer - montDebours;
     // ── II.1 – Calcul des montants ────────────────────────────────────────────
@@ -378,10 +378,10 @@ export function prepaRecetteComplTva(
     recette:  Recette,
     rtData:   RecetteTraitement,
 ): void {
-    const saisi        = parseFloat((rtData.saisiAImputer0  ?? '0').replace(',', '.'));
-    const montantDu    = parseFloat((rtData.facMontantDu0   ?? '0').replace(',', '.'));
-    const aFacturer    = parseFloat((rtData.facMontFacturer0 ?? '0').replace(',', '.'));
-    const facSolde     = parseFloat(String(facture.solde        ?? '0').replace(',', '.'));
+    const saisi        = parseFloat((rtData.saisiAImputer0       ?? '0').replace(',', '.'));
+    const montantDu    = parseFloat((rtData.facMontantDu0        ?? '0').replace(',', '.'));
+    const aFacturer    = parseFloat((rtData.facMontFacturer0     ?? '0').replace(',', '.'));
+    const facSolde     = parseFloat(String(facture.solde         ?? '0').replace(',', '.'));
     const facSoldePena = parseFloat(String(facture.soldePenalite ?? '0').replace(',', '.'));
     // ── Détermination de l'opération ─────────────────────────────────────────
     const cal = saisi - montantDu;
@@ -556,11 +556,11 @@ export function prepaRecetteComplFranchise(
     recette:  Recette,
     rtData:   RecetteTraitement,
 ): void {
-    const saisi          = parseFloat((rtData.saisiAImputer0  ?? '0').replace(',', '.'));
-    const facMontDebours = parseFloat((rtData.facMontDebours0 ?? '0').replace(',', '.'));
-    const facTotTtc      = parseFloat(String(facture.totTtc      ?? '0').replace(',', '.'));
-    const facTotRegl     = parseFloat(String(facture.totRegl     ?? '0').replace(',', '.'));
-    const facSolde       = parseFloat(String(facture.solde       ?? '0').replace(',', '.'));
+    const saisi          = parseFloat((rtData.saisiAImputer0       ?? '0').replace(',', '.'));
+    const facMontDebours = parseFloat((rtData.facMontDebours0      ?? '0').replace(',', '.'));
+    const facTotTtc      = parseFloat(String(facture.totTtc        ?? '0').replace(',', '.'));
+    const facTotRegl     = parseFloat(String(facture.totRegl       ?? '0').replace(',', '.'));
+    const facSolde       = parseFloat(String(facture.solde         ?? '0').replace(',', '.'));
     const facSoldePena   = parseFloat(String(facture.soldePenalite ?? '0').replace(',', '.'));
     // ── II.1 – Calcul des montants déjà Réglés ────────────────────────────────
     let dejaReglNonDebours = 0;

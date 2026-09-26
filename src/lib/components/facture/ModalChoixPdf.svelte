@@ -1,10 +1,9 @@
 <script lang="ts">
-    import type { Facture }                                     from '$lib/schemas/facture';
-    import type { Abonne }                                      from '$lib/schemas/abonne';
-    import type { FactureTotauxState }                          from '$lib/schemas/facture';
-    import { traitLibTotaux, traitColSpan, traitLibBasPage }    from '$lib/utils/fonctionsTotaux';
-    import { generateDocumentPdf, type PdfContext }             from '$lib/utils/generateDocumentPdf';
-    import ModalAlerte                                          from '$lib/components/ModalAlerte.svelte';
+    import type { Facture, FactureTotauxState }              from '$lib/schemas/facture';
+    import type { Abonne }                                   from '$lib/schemas/abonne';
+    import { traitLibTotaux, traitColSpan, traitLibBasPage } from '$lib/utils/fonctionsTotaux';
+    import { generateDocumentPdf, type PdfContext }          from '$lib/utils/generateDocumentPdf';
+    import ModalAlerte                                       from '$lib/components/ModalAlerte.svelte';
 
     let {
         facture,
@@ -52,9 +51,7 @@
     // ── Éligibilité FacturX ───────────────────────────────────────
     const selFacturX = $derived(
         facture !== null && (
-            facture.codeType === 20 ||
-            (facture.codeType === 30 && (facture.refFac ?? '').slice(0, 2) !== 'FB') ||
-            facture.codeType === 40
+            facture.codeType === 20 || (facture.codeType === 30 && (facture.refFac ?? '').slice(0, 2) !== 'FB') || facture.codeType === 40
         )
     );
 
@@ -76,6 +73,7 @@
     // ── Sélection d'une option ────────────────────────────────────
     async function selectOption(action: string) {
         if (!facture) return;
+        const factureSnapshot = $state.snapshot(facture) as Facture;
        // ── Validation FacturX (AVANT onclose, sinon l'alerte ne peut pas s'afficher)
         if (action === 'facturX') {
             let msg = '';
@@ -84,14 +82,12 @@
             const r2 = verifTvaIntra(String(abonne.tvaIntra ?? ''));
             if (!r2.valide) msg += r2.message + '<br>' + "Saisir le N° Tva Intracommunautaire dans le menu 'Mon Compte / Fiscalité'<br>";
             if (msg) {
-                alerteMessage = "La confection d'une Facture au format « Factur-X » nécessite la présence "
-                            + "de vos numéros Siren et de Tva intra-communautaire.<br><br>" + msg;
+                alerteMessage = "La confection d'une Facture au format « Factur-X » nécessite la présence " + "de vos numéros Siren et de Tva intra-communautaire.<br><br>" + msg;
                 alerteVisible = true;
                 return;
             }
         }
         // ── Snapshots et totaux ───────────────────────────────────
-        const factureSnapshot  = $state.snapshot(facture) as Facture;
         const totStateSnapshot = $state.snapshot(totState) as FactureTotauxState;
         const logoSnapshot     = logoBase64;
         const nomGaucheSnap    = nomPdfGauche;   // ← capturer AVANT onclose
@@ -124,9 +120,7 @@
 
 <dialog bind:this={dialog} class="sg-divDialog" style="width:fit-content;max-width:95vw;z-index:200;margin:auto" aria-modal="true">
     <fieldset class="sg-fieldset">
-        <legend class="sg-legende" style="font-size:14px;font-weight:700;margin:0 auto">
-            Affichage du PDF : Choisissez une option
-        </legend>
+        <legend class="sg-legende" style="font-size:14px;font-weight:700;margin:0 auto">Affichage du PDF : Choisissez une option</legend>
         <button class="sg-dialogFermer" title="Annuler ou Fermer" onclick={onclose}><img src="/close.png" alt=""/></button>
         <div style="display:flex;flex-direction:row;gap:10px;padding:20px 10px;justify-content:center">
             <button class="sg-button" onclick={() => selectOption('open')}>L'Ouvrir uniquement</button>

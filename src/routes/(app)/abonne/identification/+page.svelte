@@ -1,22 +1,22 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount }                                    from 'svelte';
+    import type { ActionResult }                          from '@sveltejs/kit';
+    import { fade, fly }                                  from "svelte/transition";
     import { superForm, type SuperValidated, type Infer } from 'sveltekit-superforms';
     import { IdentificationFormSchema, type IdentificationFormSchema as IdentificationFormSchemaType, validerSIREN } from '$lib/schemas/abonne';
-    import type { ActionResult } from '@sveltejs/kit';
-    import { fade, fly } from "svelte/transition";
 
     let mounted = $state(false);
     onMount(() => {
         document.body.style.cursor = '';
-        mounted = true;
+        mounted                    = true;
     });
 
     let { data }: {
         data: {
-            form: SuperValidated<Infer<typeof IdentificationFormSchemaType>>;
+            form:         SuperValidated<Infer<typeof IdentificationFormSchemaType>>;
             initialSiren: string;
-            logoBase64: string | null;
-            welcome: { email: string } | null;
+            logoBase64:   string | null;
+            welcome:      { email: string } | null;
         };
     } = $props();
 
@@ -37,31 +37,31 @@
         }
     });
     // svelte-ignore state_referenced_locally
-    let logoPreview = $state(data.logoBase64);
-    let logoFileInput = $state<HTMLInputElement | null>(null);
-    let logoMessage = $state('');
+    let logoPreview     = $state(data.logoBase64);
+    let logoFileInput   = $state<HTMLInputElement | null>(null);
+    let logoMessage     = $state('');
     let logoMessageType = $state<'success' | 'error'>('success');
 
-    let showErrorPopup = $state(false);
+    let showErrorPopup  = $state(false);
     let validationErrors: string[] = $state([]);
 
     const fieldLabels: Record<string, string> = {
-        raisonSociale0: 'Raison Sociale',
-        adresse0: 'Adresse',
-        adresseCompl0: "Complément d'adresse",
-        cp0: 'Code postal',
-        ville0: 'Ville',
-        nomPrenomContact0:'Nom - Prénom du Contact',
-        telFixe0: 'Tél. Fixe',
-        telPortable0: 'Tél. Portable',
-        urlWeb: 'Url Site Internet',
-        siren0: 'N° Siren',
-        temoinCgv: 'Mention C.G.V.',
-        iban0: 'Numéro IBAN',
-        bic0: 'BIC',
-        temoinLogo: 'Témoin Logo',
-        ligne10: 'Logo ligne 1',
-        ligne20: 'Logo ligne 2'
+        raisonSociale0:    'Raison Sociale',
+        adresse0:          'Adresse',
+        adresseCompl0:     "Complément d'adresse",
+        cp0:               'Code postal',
+        ville0:            'Ville',
+        nomPrenomContact0: 'Nom - Prénom du Contact',
+        telFixe0:          'Tél. Fixe',
+        telPortable0:      'Tél. Portable',
+        urlWeb:            'Url Site Internet',
+        siren0:            'N° Siren',
+        temoinCgv:         'Mention C.G.V.',
+        iban0:             'Numéro IBAN',
+        bic0:              'BIC',
+        temoinLogo:        'Témoin Logo',
+        ligne10:           'Logo ligne 1',
+        ligne20:           'Logo ligne 2'
     };
 
     // svelte-ignore state_referenced_locally
@@ -75,7 +75,7 @@
             if (!zodResult.success) {
                 for (const issue of zodResult.error.issues) {
                     const fieldName = issue.path[0]?.toString() ?? '';
-                    const label = fieldLabels[fieldName] ?? fieldName;
+                    const label     = fieldLabels[fieldName] ?? fieldName;
                     errs.push(`${label} : ${issue.message}`);
                 }
             }

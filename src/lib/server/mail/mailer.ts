@@ -2,20 +2,20 @@ import { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, APP_URL } from '
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
-     host: SMTP_HOST,
-     port: Number(SMTP_PORT),
+    host:   SMTP_HOST,
+    port:   Number(SMTP_PORT),
     secure: false,
     auth: {
         user: SMTP_USER,
         pass: SMTP_PASS,
-     },
+    },
 });
 
 export async function sendConfirmationEmail(email: string, token: string) {
     const confirmUrl = `${APP_URL}/verify-email?token=${token}`;
-     await transporter.sendMail({
-        from: `"Cinqenun" <${SMTP_FROM}>`,
-        to: email,
+    await transporter.sendMail({
+        from:    `"Cinqenun" <${SMTP_FROM}>`,
+        to:      email,
         subject: 'Cinqenun - Confirmez votre inscription',
         html: `
             <h1>Confirmez votre inscription à Cinqenun</h1>
@@ -35,8 +35,8 @@ export async function sendConfirmationEmail(email: string, token: string) {
 
 export async function sendWelcomeEmail(email: string, password: string) {
     await transporter.sendMail({
-        from: `"Cinqenun" <${SMTP_FROM}>`,
-        to: email,
+        from:    `"Cinqenun" <${SMTP_FROM}>`,
+        to:      email,
         subject: "Bienvenue dans l'application Cinqenun !",
         html: `
             <h1>Bienvenue dans l'application Cinqenun !</h1>
@@ -54,8 +54,8 @@ export async function sendWelcomeEmail(email: string, password: string) {
 
 export async function sendResetPasswordEmail(email: string, tempPassword: string) {
     await transporter.sendMail({
-        from: `"Cinqenun" <${SMTP_FROM}>`,
-        to: email,
+        from:    `"Cinqenun" <${SMTP_FROM}>`,
+        to:      email,
         subject: 'Cinqenun - Réinitialisation de votre mot de passe',
         html: `
             <h1>Réinitialisation de votre mot de passe</h1>

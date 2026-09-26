@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { prisma } from '$lib/server/prisma';
+import { prisma }      from '$lib/server/prisma';
 
 const TOKEN_EXPIRY_HOURS = 24;
 
@@ -7,10 +7,10 @@ export function generateToken(): string {
     return randomBytes(32).toString('hex');
 }
 export async function createPendingRegistration (
-    email: string,
+    email:          string,
     hashedPassword: string
 ): Promise<string> {
-    const token = generateToken();
+    const token     = generateToken();
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
     await prisma.pendingRegistration.deleteMany({ where: { email } });
     await prisma.pendingRegistration.create({

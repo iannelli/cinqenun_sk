@@ -1,7 +1,5 @@
 /** Fonctions utilitaires de FactureLignes.svelte */
-import { parseLigne, serializeLigne, type LigneCell } from '$lib/schemas/facture';
-import type { Facture } from '$lib/schemas/facture';
-
+import { type Facture, parseLigne, serializeLigne, type LigneCell } from '$lib/schemas/facture';
 // ─────────────────────────────────────────────────────────────────────────────
 // Interface — état de la vue lignes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,11 +101,11 @@ export function selectUnite(e: Event, ligne: LigneCell, nat0: string, st: LigneS
 // Vérification de la saisie d'une ligne
 // ─────────────────────────────────────────────────────────────────────────────
 export interface VerifSaisieState {
-    uniteVu:    boolean;
-    puQteBaseVu: boolean;
-    remMontVu:  boolean;
-    tvaVu:      boolean;
-    showAlert:  (titre: string, message: string) => void;
+    uniteVu:         boolean;
+    puQteBaseVu:     boolean;
+    remMontVu:       boolean;
+    tvaVu:           boolean;
+    showAlert:       (titre: string, message: string) => void;
     setLibHtmlLigne: (v: string) => void;
 }
 export function verifSaisie(ligne: LigneCell, st: VerifSaisieState): boolean {
@@ -143,12 +141,7 @@ export function verifSaisie(ligne: LigneCell, st: VerifSaisieState): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 // Déplacement d'une ligne dans le tableau
 // ─────────────────────────────────────────────────────────────────────────────
-export function moveLigne(
-    i: number,
-    direction: number,
-    facture: Facture,
-    setLignesArray: (v: LigneCell[]) => void
-): void {
+export function moveLigne(i:number, direction:number, facture:Facture, setLignesArray:(v:LigneCell[])=>void): void {
     const tableArray = [...(parseLigne(facture.ligne) ?? [])];
     const part = tableArray.splice(i, 1);
     const pos  = Math.min(tableArray.length, Math.max(0, i + direction));

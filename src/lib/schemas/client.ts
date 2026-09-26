@@ -1,10 +1,10 @@
-import { z } from 'zod';
+import { z }           from 'zod';
 import type { Prisma } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Séparateurs
 // ─────────────────────────────────────────────────────────────────────────────
-const ROW_SEP  = '|';   // sépare les lignes facture
+const ROW_SEP         = '|';   // sépare les lignes facture
 const CELL_SEP_DEBIT  = '*';   // sépare les éléments de stringArray0 dans debit
 const CELL_SEP_CREDIT = '*';   // sépare les éléments de stringArray0 dans credit
 const ELEM_SEP_DEBIT  = '¤';   // sépare les éléments d'une ligne debit (implicite, voir ci-dessous)
@@ -128,6 +128,7 @@ export type CreditMouvement = z.infer<typeof creditMouvementSchema>;
 export const creditLigneSchema = z.object({
     refFac0:     z.string().default(''),
     solde0:      z.string().default('0,00'),
+    soldeRemb0:  z.string().default('0,00'),
     affaireId0:  z.number().int().default(0),
     mouvements0: z.array(creditMouvementSchema).default([]),
 });
@@ -142,12 +143,12 @@ export function parseCredit(raw: string | null | undefined): Credit | null {
         return lignes.map((ligne) => {
             const cells = ligne.split(ELEM_SEP_CREDIT);
             // ── Désérialisation de stringArray0 ──────────────────────
-            const rawMouvements = cells[3] ?? '';
-            const parts         = rawMouvements.split(CELL_SEP_CREDIT).filter(Boolean);
+            const rawMouvements = cells[4] ?? '';
+            const parts = rawMouvements ? rawMouvements.split(CELL_SEP_CREDIT) : [];
             const mouvements: CreditMouvement[] = [];
             for (let i = 0; i + 3 < parts.length; i += 4) {
                 mouvements.push(creditMouvementSchema.parse({
-                    nature0:  parts[i]     ?? '',
+                    nature0:   parts[i]     ?? '',
                     date0:     parts[i + 1] ?? '',
                     montant0:  parts[i + 2] ?? '0,00',
                     facImput0: parts[i + 3] ?? '',
@@ -156,7 +157,8 @@ export function parseCredit(raw: string | null | undefined): Credit | null {
             return creditLigneSchema.parse({
                 refFac0:     cells[0] ?? '',
                 solde0:      cells[1] ?? '0,00',
-                affaireId0:  parseInt(cells[2] ?? '0', 10),
+                soldeRemb0:  cells[2] ?? '0,00',
+                affaireId0:  parseInt(cells[3] ?? '0', 10),
                 mouvements0: mouvements,
             });
         });
@@ -174,6 +176,7 @@ export function serializeCredit(data: Credit): string {
         return [
             ligne.refFac0,
             ligne.solde0,
+            ligne.soldeRemb0,
             String(ligne.affaireId0),
             strArray,
         ].join(ELEM_SEP_CREDIT);

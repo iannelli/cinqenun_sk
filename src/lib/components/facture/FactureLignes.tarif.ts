@@ -1,24 +1,23 @@
 /**
  * Gestion du référencement d'une ligne de facturation (table Tarif)
  */
-import { tick }                                       from 'svelte';
-import { invalidate }                                 from '$app/navigation';
-import { parseLigne, serializeLigne, type LigneCell } from '$lib/schemas/facture';
-import type { Tarif }                                 from '$lib/schemas/tarif';
-import type { Facture }                               from '$lib/schemas/facture';
+import { tick }                                                     from 'svelte';
+import { invalidate }                                               from '$app/navigation';
+import { type Facture, parseLigne, serializeLigne, type LigneCell } from '$lib/schemas/facture';
+import type { Tarif }                                               from '$lib/schemas/tarif';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Interface — état de la gestion Tarif
 // ─────────────────────────────────────────────────────────────────────────────
 export interface TarifGestionState {
     // Données ligne courante
-    getLigne:            () => LigneCell;
-    getLigneEditIndex:   () => number;
-    getFacture:          () => Facture | null;
-    setFacture:          (f: Facture) => void;
-    getLibHtmlLigne:     () => string;
-    setTarifId0:         (v: string) => void;
-    setLignesArray:      (v: LigneCell[]) => void;
+    getLigne:                () => LigneCell;
+    getLigneEditIndex:       () => number;
+    getFacture:              () => Facture | null;
+    setFacture:              (f: Facture) => void;
+    getLibHtmlLigne:         () => string;
+    setTarifId0:             (v: string) => void;
+    setLignesArray:          (v: LigneCell[]) => void;
     // Modal tarif
     setTarifModalVisible:    (v: boolean) => void;
     setTarifModalTitre:      (v: string)  => void;
@@ -33,12 +32,12 @@ export interface TarifGestionState {
     getTarifIsModification:  () => boolean;
     getLigneInitial:         () => LigneCell | null;
     // Toast
-    showToast:           (message: string, succes?: boolean) => void;
+    showToast:               (message: string, succes?: boolean) => void;
     // Alerte
-    showAlert:           (titre: string, message: string) => void;
+    showAlert:               (titre: string, message: string) => void;
     // Reset
-    setLigneEditIndex:   (v: number) => void;
-    setDivSaisieVu:      (v: boolean) => void;
+    setLigneEditIndex:       (v: number) => void;
+    setDivSaisieVu:          (v: boolean) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,9 +184,7 @@ export async function creerTarif(motCle:string, pathname:string, ligne:LigneCell
                     const facture  = st.getFacture();
                     if (facture) {
                         const tableArray = [...(parseLigne(facture.ligne) ?? [])];
-                        const idx        = st.getLigneEditIndex() >= 0
-                            ? st.getLigneEditIndex()
-                            : tableArray.length - 1;
+                        const idx        = st.getLigneEditIndex() >= 0 ? st.getLigneEditIndex() : tableArray.length - 1;
                         if (tableArray[idx]) {
                             tableArray[idx] = { ...tableArray[idx], tarifId0: String(newId) };
                             facture.ligne   = serializeLigne(tableArray);

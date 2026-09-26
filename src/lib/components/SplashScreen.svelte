@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+
     onMount(() => {
         setTimeout(() => {
             const splash = document.getElementById('splash-screen');

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { resolve } from '$app/paths';
+
     let { data } = $props();
 </script>
 

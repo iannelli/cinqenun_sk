@@ -1,10 +1,9 @@
 import type { PageServerLoad, Actions } from './$types';
-import { fail, redirect } from '@sveltejs/kit';
-import { superValidate, message } from 'sveltekit-superforms';
-import { zod4 } from 'sveltekit-superforms/adapters';
-import { prisma } from '$lib/server/prisma';
-import { IdentificationFormSchema, ABONNE_SELECT, parseIdentite, buildIdentite, parseLogoText, buildLogoText, validerSIREN } from '$lib/schemas/abonne';
-import type { IdentiteDerived, LogoTextDerived } from '$lib/schemas/abonne';
+import { fail, redirect }               from '@sveltejs/kit';
+import { superValidate, message }       from 'sveltekit-superforms';
+import { zod4 }                         from 'sveltekit-superforms/adapters';
+import { prisma }                       from '$lib/server/prisma';
+import { type IdentiteDerived, type LogoTextDerived, IdentificationFormSchema, ABONNE_SELECT, parseIdentite, buildIdentite, parseLogoText, buildLogoText, validerSIREN } from '$lib/schemas/abonne';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
     if (!locals.user) throw redirect(303, '/login');
@@ -22,10 +21,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         {
             ...identite,
             temoinLogo: abonne.temoinLogo ?? 0,
-            ligne10: logoText.ligne10,
-            ligne20: logoText.ligne20,
-            urlWeb: abonne.urlWeb ?? '',
-            temoinCgv: (abonne.temoinCgv ?? 0) === 1
+            ligne10:    logoText.ligne10,
+            ligne20:    logoText.ligne20,
+            urlWeb:     abonne.urlWeb ?? '',
+            temoinCgv:  (abonne.temoinCgv ?? 0) === 1
         },
         zod4(IdentificationFormSchema),
         { id: 'identification' }
@@ -34,7 +33,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     let logoBase64: string | null = null;
     if (abonne.logoData && abonne.logoMimeType) {
         const buffer = Buffer.from(abonne.logoData);
-        logoBase64 = `data:${abonne.logoMimeType};base64,${buffer.toString('base64')}`;
+        logoBase64   = `data:${abonne.logoMimeType};base64,${buffer.toString('base64')}`;
     }
     // Détecte le paramètre ?welcome pour la modale de bienvenue
     const welcomeParam = url.searchParams.get('welcome');
@@ -156,13 +155,13 @@ export const actions: Actions = {
             const h = metadata.height ?? 0;
             if (w > 600 || h > 160) {
                 buffer = await sharp(buffer)
-                    .resize({
-                        width: 600,
-                        height: 160,
-                        fit: 'inside',
-                        withoutEnlargement: true
-                    })
-                    .toBuffer();
+                .resize({
+                    width: 600,
+                    height: 160,
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .toBuffer();
             }
         } catch {
             // sharp non disponible

@@ -33,7 +33,7 @@ export type LettreFields   = z.infer<typeof lettreSchema>;
 export type PenaliteFields = z.infer<typeof penaliteSchema>;
 
 // ── Constantes ───────────────────────────────────────────────────────────────
-export const LETTRE_SEP = '|';
+export const LETTRE_SEP   = '|';
 export const PENALITE_SEP = '|';
 
 export const TYPE_LETTRE_OPTIONS = [

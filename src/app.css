@@ -147,7 +147,7 @@ dialog.sg-divDialog .sg-dialogFermer {
     padding-top: 15px;
     width: 100%;
 }
-/* 3 – Bouton sg-dialogFermer en sur-impression */
+/* Bouton sg-dialogFermer en sur-impression */
 .sg-dialogFermer {
     position: absolute;
     top: -12px;    /* Ajusté pour chevaucher le bord haut */
@@ -229,6 +229,10 @@ dialog.sg-divDialog .sg-dialogFermer {
     position: sticky;
     top: 0;
 }
+.sg-myTable tr td {
+    padding-left: 5px;
+    text-align: center;
+}
 .sg-myTable tr:nth-child(odd) td:not(:last-child) {
     background-color: #f9f9fa;
 }
@@ -277,26 +281,8 @@ dialog.sg-divDialog .sg-dialogFermer {
 .sg-trSha--clickable:has(td.sg-tdBtn:hover)::after {
     opacity: 0;
 }
-.sg-myTable tr td {
-    padding-left: 5px;
-    text-align: center;
-}
-.sg-btn {
-    border: none;
-    background-color: white;
-    cursor: pointer;
-    opacity: 0.3;
-}
-.sg-btn:hover {
-    opacity: 1;
-    display: inblock;
-}
-.sg-btn img {
-    width: 15px;
-    height: 15px;
-    margin-left: 10px;
-}
 
+/*
 .sg-myInput {
     background-image: url("/search.png");
     background-size: 15px;
@@ -310,7 +296,7 @@ dialog.sg-divDialog .sg-dialogFermer {
     float: left;
     height: 15px;
 }
-
+*/
 /* ── Styles appliqués sur chaque Ligne de la Table Comme GMAIL ── */
 /* Cellule fantôme : présente dans le DOM mais sans largeur */
 .sg-thOverlay,
@@ -326,58 +312,21 @@ dialog.sg-divDialog .sg-dialogFermer {
     border: none !important;
     visibility: hidden;
 }
-.sg-tdOverlay {
+.sg-tdOverlay { /* ??????????????????????????????????????????????????????????????????*/
     overflow: visible;
     position: relative;
 }
-/* Conteneur des boutons — caché par défaut */
-.sg-rowActions {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translate(-45vw, -50%); /* Valable pour la liste des Factures */
-    height: 35px;
-    align-items: center;
-    gap: 6px;
-    padding: 0 16px 0 40px;
-    background: linear-gradient(to right, transparent, #eef2ff 40%);
-    pointer-events: auto;
-    z-index: 1;
-}
-.sg-rowActions--affaires {
-    transform: translate(-40vw, -50%);  /* Valable pour la liste des Affaires */
-}
-.sg-rowActions--clients {
-    transform: translate(-50vw, -50%);  /* Valable pour la liste des Clients */
-}
-/* Déclenchement au survol de la ligne */
-.sg-trSha:hover .sg-rowActions {
-    display: flex;
+/* Effet Survol des ligne de la Table */
+.sg-trSha--hovered td {
+    background-color: rgb(238, 243, 248) /*#c1d4ec*/ !important;
 }
 
-/* Boutons dans l'overlay Gmail-style */
+/* ─── Tooltip custom dans les listes Affaire, Facture et Client ─────────────────── */
 .sg-btn {
     border: none;
-    background: none;
+    background-color: white;
     cursor: pointer;
-    padding: 2px;
-    border-radius: 4px;
-    opacity: 0.55;
-    transition: opacity 0.15s, background 0.15s;
-    display: flex;
-    align-items: center;
-}
-.sg-btn:hover {
-    opacity: 1;
-    background-color: rgba(0, 0, 0, 0.08);
-}
-.sg-btn img {
-    width: 16px;
-    height: 16px;
-}
-/* ─── Tooltip custom (remplace title natif) ─────────────────── */
-.sg-btn {
+    opacity: 0.3;
     position: relative;
 }
 .sg-btn::after {
@@ -399,4 +348,13 @@ dialog.sg-divDialog .sg-dialogFermer {
 }
 .sg-btn:hover::after {
     opacity: 1;
+}
+.sg-btn:hover {
+    opacity: 1;
+    display: inblock;
+}
+.sg-btn img {
+    width: 14px;
+    height: 14px;
+    margin-left: 10px;
 }

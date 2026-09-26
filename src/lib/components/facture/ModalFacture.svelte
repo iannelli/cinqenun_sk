@@ -1,17 +1,15 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { deserialize } from '$app/forms';
-    import { parseStatut } from '$lib/schemas/abonne';
-    import ModalAlerte from '$lib/components/ModalAlerte.svelte';
-    import ModalConfirm from '$lib/components/ModalConfirm.svelte';
-    import type { Abonne } from '$lib/schemas/abonne';
+    import { onMount }      from 'svelte';
+    import { deserialize }  from '$app/forms';
+    import { parseStatut, type Abonne }  from '$lib/schemas/abonne';
     import type { Affaire } from '$lib/schemas/affaire';
-    import type { Facture } from '$lib/schemas/facture';
-    import { dateEcheanceSchema, createFactureTotauxState, parseLigne, parseClientFacture, serializeClientFacture, type LigneCell, type FactureTotauxState } from '$lib/schemas/facture';
-    import FactureEntete  from './FactureEntete.svelte';
-    import FactureLignes  from './FactureLignes.svelte';
-    import FactureTotaux  from './FactureTotaux.svelte';
-    import ModalChoixPdf from '$lib/components/facture/ModalChoixPdf.svelte';
+    import { dateEcheanceSchema, createFactureTotauxState, parseLigne, parseClientFacture, serializeClientFacture, type LigneCell, type FactureTotauxState, type Facture } from '$lib/schemas/facture';
+    import FactureEntete    from './FactureEntete.svelte';
+    import FactureLignes    from './FactureLignes.svelte';
+    import FactureTotaux    from './FactureTotaux.svelte';
+    import ModalChoixPdf    from '$lib/components/facture/ModalChoixPdf.svelte';
+    import ModalAlerte      from '$lib/components/ModalAlerte.svelte';
+    import ModalConfirm     from '$lib/components/ModalConfirm.svelte';
 
     let dateEcheanceDate0 = $state('');   // mis à jour par FactureEntete
     let vueConfirmEnregistrement = $state(false);
@@ -21,44 +19,45 @@
         clientId,
         abonne,
         affaire,
-        mode      = 'create',
-        action    = '',
-        facture   = $bindable(null),
-        factures  = [],
-        clients   = [],
-        client    = null,
-        tarifs    = [],
-        statutRaw = '',
+        mode         = 'create',
+        action       = '',
+        facture      = $bindable(null),
+        factures     = [],
+        clients      = [],
+        client       = null,
+        tarifs       = [],
+        statutRaw    = '',
         onclose,
         onrefresh,
         devisOptions = [],
         totState,
         onOpenPdf,
     }: {
-        affaireId : number;
-        clientId  : number;
-        abonne    : Abonne;
-        affaire   : Affaire;
-        mode      : 'create' | 'update';
-        action    : string;
-        facture   : Facture | null;
-        factures  : Facture[];
-        clients   : { id: number; libClient: string }[];
-        client    : { soldeCredit: number | null } | null;
-        tarifs    : import('$lib/schemas/tarif').Tarif[];
-        statutRaw : string;
-        onclose   : () => void;
-        onrefresh : () => void;
-        devisOptions: string[];
-        totState: FactureTotauxState;
-        onOpenPdf?: () => void;
+        affaireId    : number;
+        clientId     : number;
+        abonne       : Abonne;
+        affaire      : Affaire;
+        mode         : 'create' | 'update';
+        action       : string;
+        facture      : Facture | null;
+        factures     : Facture[];
+        clients      : { id: number; libClient: string }[];
+        client       : { soldeCredit: number | null } | null;
+        tarifs       : import('$lib/schemas/tarif').Tarif[];
+        statutRaw    : string;
+        onclose      : () => void;
+        onrefresh    : () => void;
+        devisOptions : string[];
+        totState     : FactureTotauxState;
+        onOpenPdf?   : () => void;
     } = $props();
 
     let messageEnregistrement = $state('');
-    let totaux = $state(createFactureTotauxState());
-    let factureTotauxRef = $state<ReturnType<typeof FactureTotaux> | null>(null);
-    let enregistrement = $state(false);
-    let factureEnregistree = $state(false);
+    let totaux                = $state(createFactureTotauxState());
+    let factureTotauxRef      = $state<ReturnType<typeof FactureTotaux> | null>(null);
+    let enregistrement        = $state(false);
+    let factureEnregistree    = $state(false);
+    let factureModifiee       = $state(false);
 
      // ─── Bandeau résultat enregistrement ────────────────────────────
     let bandeauVisible = $state(false);
@@ -70,6 +69,11 @@
         bandeauVisible = true;
         setTimeout(()=>{bandeauVisible=false}, 4000);
     }
+
+    let confirmImputVisible  = $state(false);
+    let confirmImputMessage  = $state('');
+    let pendingImputation    = $state<(() => void) | null>(null);
+    let confirmFermetureVisible = $state(false);
 
     // ─── Variables alerte statut fiscal (ferme la modale) ───────────
     let alerteVisible = $state(false);
@@ -104,6 +108,8 @@
     // ─── Modal PDF ───────────────────────────────────────────────
     let showModalPdf = $state(false);
     let pdfFacture   = $state<Facture | null>(null);
+    // Variable interne totaux bindée à FactureTotaux
+    let totauxLocal = $state(createFactureTotauxState());
 
     // Fonction de contrôle séparé qui déclenche la confirmation
     function demanderConfirmationEnregistrement(): void {
@@ -132,8 +138,8 @@
         vueConfirmEnregistrement = true;
     }
 
-// ─── Contrôles avant validation → confirmation ─────────────────
-function demanderConfirmationValidation(): void {
+    // ─── Contrôles avant validation → confirmation ─────────────────
+    function demanderConfirmationValidation(): void {
         if (!facture) return;
         // dateEcheance présente et valide en la forme
         const [date0 = '', couleurHtml0 = ''] = String(facture.dateEcheance ?? '').split('|');
@@ -149,7 +155,7 @@ function demanderConfirmationValidation(): void {
     async function valider(): Promise<void> {
         if (enregistrement || !facture) return;
         vueConfirmValidation = false;
-        enregistrement = true;
+        enregistrement       = true;
         try {
             const fd = new FormData();
             fd.append('factureId', String(facture.id));
@@ -165,7 +171,7 @@ function demanderConfirmationValidation(): void {
             factureEnregistree = true;
             onrefresh();
             // ─── Fermeture automatique 2s après le succès ──────────────
-            setTimeout(() => { onclose(); }, 2000);
+            setTimeout(() => { onclose(); }, 1000);
         } catch (erreur) {
             afficherBandeau(false, `Une erreur est survenue lors de la validation : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
             // ─── Fermeture automatique 2s après l'échec ────────────────
@@ -187,12 +193,12 @@ function demanderConfirmationValidation(): void {
             const clientRaw    = facture?.client ? parseClientFacture(facture.client) : null;
             const clientSerial = clientRaw ? serializeClientFacture(clientRaw) : '';
             fd.append('client',        clientSerial);
-            fd.append('regimeTva',     facture?.regimeTva     ?? '');
-            fd.append('typeDelai',     String(facture?.typeDelai   ?? 0));
-            fd.append('delai',         String(facture?.delai       ?? 0));
-            fd.append('dateEcheance',  facture?.dateEcheance  ?? '');
-            fd.append('ligne',         facture?.ligne         ?? '');
-            fd.append('total',         facture?.total         ?? '');
+            fd.append('regimeTva',     facture?.regimeTva            ?? '');
+            fd.append('typeDelai',     String(facture?.typeDelai     ?? 0));
+            fd.append('delai',         String(facture?.delai         ?? 0));
+            fd.append('dateEcheance',  facture?.dateEcheance         ?? '');
+            fd.append('ligne',         facture?.ligne                ?? '');
+            fd.append('total',         facture?.total                ?? '');
             fd.append('remTot',        String(facture?.remTot        ?? 0));
             fd.append('totTtc',        String(facture?.totTtc        ?? 0));
             fd.append('acompTaux',     String(facture?.acompTaux     ?? ''));
@@ -202,8 +208,9 @@ function demanderConfirmationValidation(): void {
             fd.append('totRegl',       String(facture?.totRegl       ?? 0));
             fd.append('montCli',       String(facture?.montCli       ?? 0));
             fd.append('solde',         String(facture?.solde         ?? 0));
+            fd.append('penalite',      facture?.penalite             ?? '');
             fd.append('soldePenalite', String(facture?.soldePenalite ?? 0));
-            fd.append('acompMont',     facture?.acompMont     ?? '');
+            fd.append('acompMont',     facture?.acompMont            ?? '');
             fd.append('acompteId',     String(totState.acompteId0    ?? 0));
             let response: Response;
             if (montantImputerSaisiValeur !== null && montantImputerSaisiValeur > 0) {
@@ -213,13 +220,13 @@ function demanderConfirmationValidation(): void {
                 fd.append('codeType',   String(facture?.codeType ?? 0));
                 fd.append('refFac',     facture?.refFac          ?? '');
                 fd.append('refDevis',   facture?.refDevis        ?? '');
-                fd.append('refPre',     facture?.refPre          ?? '');   // ← ajout
+                fd.append('refPre',     facture?.refPre          ?? '');
                 fd.append('dateEmis',   facture?.dateEmis ? new Date(facture.dateEmis).toISOString() : new Date().toISOString());
                 fd.append('clientId',   String(clientId));
                 response = await fetch('?/createFacture', { method: 'POST', body: fd });
             } else {
                 fd.append('factureId', String(facture?.id ?? 0));
-                fd.append('refPre',    facture?.refPre ?? '');   // ← ajout
+                fd.append('refPre',    facture?.refPre ?? '');
                 response = await fetch('?/updateFacture', { method: 'POST', body: fd });
             }
             if (!response.ok) {
@@ -233,15 +240,14 @@ function demanderConfirmationValidation(): void {
             }
             // Message de Succès -----
             const msgSucces = isDevis
-                ? (mode === 'create' ? 'Création du Devis effectuée'     : 'Modification du Devis effectuée')
+                ? (mode === 'create' ? 'Création du Devis effectuée'      : 'Modification du Devis effectuée')
                 : (mode === 'create' ? 'Création de la Facture effectuée' : 'Modification de la Facture effectuée');
             afficherBandeau(true, msgSucces);
             factureEnregistree = true;
             montantImputerSaisiValeur = null;
             onrefresh();
             // ─── Fermeture automatique 2s après le succès ──────────────
-            setTimeout(() => { onclose(); }, 2000);
-
+            setTimeout(() => { onclose(); }, 1000);
         } catch (erreur) {
             afficherBandeau(false, `Une erreur est survenue lors de l'enregistrement : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
             // ─── Fermeture automatique 2s après l'erreur ───────────────
@@ -270,24 +276,26 @@ function demanderConfirmationValidation(): void {
     </div>
     <p style="font-size:13px;color:black;font-weight:500;font-style:italic;text-align:center;margin-top:5px">{titre2}</p>
     <button class="sg-dialogFermer" title="Annuler ou Fermer" onclick={() => {
-        if (!factureEnregistree && factureTotauxRef?.hasUnsavedChanges?.()) {
-            factureTotauxRef.confirmCloseTotaux(() => { onrefresh(); onclose(); });
+        if (!factureEnregistree && (factureModifiee || factureTotauxRef?.hasUnsavedChanges?.())) {
+            confirmFermetureVisible = true;
         } else {
-            if (factureEnregistree) {
-                onrefresh();
-            }
+            if (factureEnregistree) { onrefresh(); }
             onclose();
         }
     }}><img src="/close.png" alt=""/></button>
     <p style="margin-top:20px"></p>
-    <FactureEntete bind:facture {affaire} {affaireId} {clients} {action} {onrefresh} bind:dateEcheanceDate0 {devisOptions} {factures} onAbandonner={()=>{onclose()}}/>
+    <FactureEntete bind:facture {affaire} {affaireId} {clients} {action} {onrefresh} bind:dateEcheanceDate0 {devisOptions} {factures} onAbandonner={()=>{onclose()}} onModification={() => factureModifiee = true}/>
     <p style="margin-top:30px"></p>
-    <FactureLignes bind:facture bind:totaux {tarifs} {dateEcheanceDate0} {onrefresh} />
+    <FactureLignes bind:facture bind:totaux {tarifs} {dateEcheanceDate0} {onrefresh} onModification={() => factureModifiee = true}/>
     <p style="margin-top:30px"></p>
-    <FactureTotaux bind:facture bind:totaux {totState} {client} {mode} {onrefresh} onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant}}/>
+    <FactureTotaux bind:facture bind:totaux={totauxLocal} {totState} {client} {mode} {onrefresh}
+                   onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant; if(facture) facture.imputCreCli=montant}}
+                   onDemandeImputation={(msg, _sit, fn) => {confirmImputMessage=msg;pendingImputation=fn;confirmImputVisible=true}}/>
+    <ModalConfirm bind:visible={confirmImputVisible} titre="Imputation du Crédit Client" message={confirmImputMessage} labelConfirm="Confirmer" labelAnnuler="Annuler"
+                  onconfirm={()=>{confirmImputVisible=false;pendingImputation?.();pendingImputation=null}} onannuler={()=>{confirmImputVisible=false;pendingImputation=null}} />
     <div class="divButton0">
         <div class="divButton1">
-            <button type="button" onclick={() => onOpenPdf?.()} title="Afficher au format Pdf" class="btn2"><img src="/apercu.png" alt=""/> Générer le Pdf</button>
+            <button type="button" onclick={()=>{Object.assign(totState, $state.snapshot(totauxLocal));onOpenPdf?.()}} title="Afficher au format Pdf" class="btn2"><img src="/apercu.png" alt=""/>Générer le Pdf</button>
             {#if (facture?.codeType === 10 && facture?.statutCode !== 20) || facture?.refFac.slice(0,2) === 'FB'}
                 <button onclick={demanderConfirmationEnregistrement} title="Enregistrer les Modifications" class="btn2"><img style="margin-left:2px;width:12%;height:auto" src="/save.png" alt=""/> Enregistrer</button>
             {/if}
@@ -311,6 +319,10 @@ function demanderConfirmationValidation(): void {
 {#if showModalPdf && pdfFacture}
     <ModalChoixPdf facture={pdfFacture} {abonne} {totState} libAffaire={affaire.libAffaire} onclose={()=>{showModalPdf=false;pdfFacture=null}} />
 {/if}
+<ModalConfirm bind:visible={confirmFermetureVisible} titre="Abandon des modifications" message="Des modifications non enregistrées seront perdues.<br>Confirmez-vous l'abandon ?"
+    labelConfirm="Abandonner" labelAnnuler="Continuer la saisie"
+    onconfirm={() => { confirmFermetureVisible = false; onclose(); }} onannuler={() => { confirmFermetureVisible = false; }}
+/>
 
 <style>
     .dialogStyle {

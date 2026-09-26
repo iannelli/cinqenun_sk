@@ -130,6 +130,24 @@ export function generateXmlFacturX(ctx:PdfContext): string {
         ].join('');
     };
     const buildLigneTotalisation = (arr: string[], idx: number): string => {
+        // ── Recalcul si imputCreCli > 0 mais arr[3] vide ─────────────
+        const imputCreCli = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
+        if (imputCreCli > 0 && !arr[3] && regimeTva === 'B') {
+            const totalHT = totaux.reduce((sum, t) =>
+                sum + (parseFloat(String(t[2] ?? '0').replace(',', '.')) || 0), 0
+            );
+            const montBrut = parseFloat(String(arr[2] ?? '0').replace(',', '.')) || 0;
+            const tauxTva  = parseFloat(String(arr[0] ?? '').slice(0, 4).replace(',', '.')) || 0;
+            if (totalHT > 0) {
+                const acompte = (imputCreCli * (montBrut / totalHT)) / (1 + tauxTva / 100);
+                const montHt  = montBrut - acompte;
+                const montTva = (montHt * tauxTva) / 100;
+                arr[3] = acompte.toFixed(2).replace('.', ',');
+                arr[4] = montHt.toFixed(2).replace('.', ',');
+                arr[5] = montTva.toFixed(2).replace('.', ',');
+                arr[6] = (montHt + montTva).toFixed(2).replace('.', ',');
+            }
+        }
         const prepaid = regimeTva === 'B' && arr[3]
             ? `<ram:PrepaidAmount currencyID="EUR">${toXmontant(arr[3])}</ram:PrepaidAmount>`
             : '';
@@ -153,6 +171,7 @@ export function generateXmlFacturX(ctx:PdfContext): string {
             lt[0] === 'Total TTC'           ? `<ram:GrandTotalAmount>${toXmontant(lt[1])}</ram:GrandTotalAmount>`     : '',
             lt[0] === 'Acompte réglé'       ? `<ram:TotalPrepaidAmount>${toXmontant(lt[1])}</ram:TotalPrepaidAmount>` : '',
             lt[0] === 'Imputation Excédent' ? `<ram:TotalPrepaidAmount>${toXmontant(lt[1])}</ram:TotalPrepaidAmount>` : '',
+            lt[0] === 'Imputation Crédit'   ? `<ram:TotalPrepaidAmount>${toXmontant(lt[1])}</ram:TotalPrepaidAmount>` : '',
             lt[0] === 'Total TTC Dû'        ? `<ram:DuePayableAmount>${toXmontant(lt[1])}</ram:DuePayableAmount>`     : '',
         ].join('')).join('');
         return [

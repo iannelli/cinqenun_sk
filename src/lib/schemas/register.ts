@@ -1,21 +1,21 @@
 import { z } from 'zod';
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailRegex    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{10,}$/;
 
 export const RegisterFormSchema = z.object({
-  email: z.string().min(1, 'Les 2 adresses courriel doivent être servies.'),
-  emailConfirm: z.string().min(1, 'Les 2 adresses courriel doivent être servies.'),
-  password: z.string().min(1, 'Les 2 mots de passe doivent être servis.'),
+  email:           z.string().min(1, 'Les 2 adresses courriel doivent être servies.'),
+  emailConfirm:    z.string().min(1, 'Les 2 adresses courriel doivent être servies.'),
+  password:        z.string().min(1, 'Les 2 mots de passe doivent être servis.'),
   passwordConfirm: z.string().min(1, 'Les 2 mots de passe doivent être servis.'),
 })
   .refine(d => emailRegex.test(d.email), {
     message: "L'adresse courriel n'est pas valide.",
-    path: ['email'],
+    path:    ['email'],
   })
   .refine(d => d.email === d.emailConfirm, {
     message: 'Les 2 adresses courriel doivent être identiques.',
-    path: ['emailConfirm'],
+    path:    ['emailConfirm'],
   })
   .refine(d => passwordRegex.test(d.password), {
     message:
@@ -29,5 +29,5 @@ export const RegisterFormSchema = z.object({
   })
   .refine(d => d.password === d.passwordConfirm, {
     message: 'Les 2 mots de passe doivent être identiques.',
-    path: ['passwordConfirm'],
+    path:    ['passwordConfirm'],
   });

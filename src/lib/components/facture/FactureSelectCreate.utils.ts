@@ -1,9 +1,7 @@
-import type { Facture }            from '$lib/schemas/facture';
-import type { FactureTotauxState } from '$lib/schemas/facture';
-import { createFactureVide, parseTotal, serializeTotal, CELL_SEP, type TotalRow } from '$lib/schemas/facture';
-import { parseStatut }             from '$lib/schemas/abonne';
-import { regimeTvaFacture }        from '$lib/utils/regimeTva';
+import { createFactureVide, parseTotal, serializeTotal, CELL_SEP, type TotalRow, type Facture, type FactureTotauxState } from '$lib/schemas/facture';
 import { traitColSpan, traitLibTotaux, traitLibBasPage } from '$lib/utils/fonctionsTotaux';
+import { parseStatut }                                   from '$lib/schemas/abonne';
+import { regimeTvaFacture }                              from '$lib/utils/regimeTva';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -29,8 +27,8 @@ export type SelectCreateContext = {
     totState:   FactureTotauxState;
     setDevisOptions: (options: string[]) => void;
     // Callbacks
-    calNum:             ()                              => string;
-    showAlerte:         (titre: string, msg: string)    => void;
+    calNum:             () => string;
+    showAlerte:         (titre: string, msg: string) => void;
     setModalFacture:    (mode: 'create' | 'update', action: string, facture: Facture) => void;
 };
 
@@ -50,6 +48,13 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
         );
         return;
     }
+    // ── Réinitialisation de totState avant tout calcul ────────────────────
+    ctx.totState.imputAcomp0     = '0';
+    ctx.totState.acompteId0      = 0;
+    ctx.totState.acompMontArray0 = [];
+    ctx.totState.acompPresta0    = '0,00';
+    ctx.totState.acompVente0     = '0,00';
+    ctx.totState.totBrutTtc0     = '0,00';
     // ── Données client figées à l'émission ───────────────────────
     const cli  = ctx.client;
     const pays0 = cli?.pays        ?? '';
@@ -77,20 +82,23 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
         refFac:   val === 'Devis' ? 'D' + ctx.calNum() : 'FB' + ctx.calNum(),
     });
     if (val !== 'Devis') {
+        // Alimenter devisOptions dans tous les cas (copie ou facture simple)
+        ctx.setDevisOptions(
+            (ctx.factures
+                .filter(f => f.codeType === 10)
+                .map(f => f.refFac)
+                .filter(Boolean)) as string[]
+        );
         if (val.startsWith('Facture par copie du Devis ')) {
             const refDevis = val.replace('Facture par copie du Devis ', '').trim();
             newFacture.refDevis = refDevis;
-            // Facture par copie du devis → positionner le select
-            ctx.setDevisOptions(
-                (ctx.factures
-                    .filter(f => f.codeType === 10)
-                    .map(f => f.refFac)
-                    .filter(Boolean)) as string[]
-            );
             const devis = ctx.factures.find(f => f.refFac === refDevis);
             if (devis) {
-                newFacture.ligne = devis.ligne ?? '';
-                newFacture.total = devis.total ?? '';
+                newFacture.ligne       = devis.ligne       ?? '';
+                newFacture.total       = devis.total       ?? '';
+                newFacture.totTtc      = devis.totTtc      ?? 0;
+                newFacture.totPrestaHt = devis.totPrestaHt ?? 0;
+                newFacture.totVenteHt  = devis.totVenteHt  ?? 0;
             }
         }
         val = 'Facture';
@@ -128,13 +136,29 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
             ctx.totState.acompteId0 = fAcomp.id;
         }
     }
+    // ── Détermination du refPre pour l'excédent d'encaissement ────────────────
+    if (newFacture.codeType === 30 && ctx.totState.imputAcomp0 === '1' && (cli?.soldeCredit ?? 0) > 0) {
+        const creditRaw = (ctx.client as Record<string, unknown>)?.credit as string | null;
+        if (creditRaw) {
+            const lignes = creditRaw.split('|').filter(Boolean);
+            for (const ligne of lignes) {
+                const cells   = ligne.split('#');
+                const refFac0 = cells[0] ?? '';
+                const solde0  = parseFloat((cells[1] ?? '0').replace(',', '.')) || 0;
+                if (solde0 > 0 && refFac0) {
+                    (newFacture as Record<string, unknown>).refPre = refFac0;
+                    break;
+                }
+            }
+        }
+    }
     // ── Franchise Tva : Imputation de l'Acompte sur les Totaux Finaux ──────────────────────────
     if (newFacture.refDevis && ctx.totState.imputAcomp0 === '2') {
         ctx.totState.totBrutTtc0 = String(newFacture.totTtc ?? '0,00');
         const brut  = parseFloat(String(ctx.totState.totBrutTtc0).replace(',', '.'));
         const acomp = parseFloat(String(newFacture.acompMont ?? '0').replace(',', '.'));
         if (!isNaN(brut) && !isNaN(acomp)) {
-            newFacture.totTtc = (brut - acomp).toFixed(2).replace('.', ',') as unknown as number | null;
+            newFacture.totTtc = parseFloat((brut - acomp).toFixed(2));
         }
     }
     // ── Imposition Tva : Imputation de l'Acompte sur les lignes de totalisation  ────────────────────────
@@ -152,8 +176,8 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
             const updatedRows: TotalRow[] = totalRows.map((row: TotalRow) => {
                 const typeSlice = row.typeTotalisation0.slice(4, 6);
                 if (typeSlice === '00' || typeSlice === '11') {
-                    const taux      = row.typeTotalisation0.slice(0, 4);
-                    const acompItem = acompItems.find((a) => a.tauxTva0 === taux);
+                    const taux       = row.typeTotalisation0.slice(0, 4);
+                    const acompItem  = acompItems.find((a) => a.tauxTva0 === taux);
                     const updatedRow = { ...row };
                     if (acompItem) {
                         updatedRow.acompteImputation0 = acompItem.montAcompHt;
@@ -180,7 +204,7 @@ export async function handleSelectCreate(e:Event, ctx:SelectCreateContext):Promi
                 a.typeTotalisation0.slice(4, 6).localeCompare(b.typeTotalisation0.slice(4, 6))
             );
             (newFacture as Record<string, unknown>).total  = serializeTotal(updatedRows);
-            (newFacture as Record<string, unknown>).totTtc = totTtc.toFixed(2).replace('.', ',');
+            (newFacture as Record<string, unknown>).totTtc = parseFloat(totTtc.toFixed(2));
         }
     }
     // ── Montants Prestation et Vente ──────────────────────────────

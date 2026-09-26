@@ -1,12 +1,12 @@
-import { hashPassword } from '$lib/server/auth/password';
-import { fail } from '@sveltejs/kit';
-import { Prisma } from '@prisma/client';
-import type { PageServerLoad, Actions } from './$types';
-import { superValidate, message } from 'sveltekit-superforms';
-import { zod4 } from 'sveltekit-superforms/adapters';
-import { RegisterFormSchema } from '$lib/schemas/register';
-import { createPendingRegistration } from '$lib/server/auth/email-token';
-import { sendConfirmationEmail } from '$lib/server/mail/mailer';
+import { hashPassword }                      from '$lib/server/auth/password';
+import { fail }                              from '@sveltejs/kit';
+import { Prisma }                            from '@prisma/client';
+import type { PageServerLoad, Actions }      from './$types';
+import { superValidate, message }            from 'sveltekit-superforms';
+import { zod4 }                              from 'sveltekit-superforms/adapters';
+import { RegisterFormSchema }                from '$lib/schemas/register';
+import { createPendingRegistration }         from '$lib/server/auth/email-token';
+import { sendConfirmationEmail }             from '$lib/server/mail/mailer';
 
 // ─── Load ────────────────────────────────────────────────────────
 export const load: PageServerLoad = async () => {

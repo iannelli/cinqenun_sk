@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount }           from 'svelte';
+    import { onMount, tick }     from 'svelte';
     import { fade }              from 'svelte/transition';
     import { invalidate }        from '$app/navigation';
     import type { ActionResult } from '@sveltejs/kit';
@@ -12,6 +12,7 @@
     import { deleteFacture, annulationFacture, type SupprAnnulContext, type AnnulationSituation } from '$lib/components/facture/FactureSupprAnnul.utils';
     import { handleSelectCreate, type SelectCreateContext }                                       from '$lib/components/facture/FactureSelectCreate.utils';
     import { formatDate, formatMontant, libFacTypeDelai  }                                        from '$lib/utils/format';
+    import { traitColSpan, traitLibTotaux, traitLibBasPage, traitLigneTotal } from '$lib/utils/fonctionsTotaux';
     // ─── Composants ───────────────────────────────────────────────
     import ModalFacture      from '$lib/components/facture/ModalFacture.svelte';
     import ModalEncaissement from '$lib/components/encaissement/ModalEncaissement.svelte';
@@ -40,9 +41,9 @@
     let bandeauMessage  = $state('');
     let bandeauSucces   = $state(true);
     function showToast(message:string, succes=true):void {
-        bandeauMessage = message;
-        bandeauSucces  = succes;
-        bandeauVisible = true;
+        bandeauMessage  = message;
+        bandeauSucces   = succes;
+        bandeauVisible  = true;
         setTimeout(() => bandeauVisible=false, 3000);
     }
 
@@ -75,13 +76,37 @@
     };
     let recettes = $derived(data.recettes ?? []);
     let modalFactureDevisOptions = $state<string[]>([]);
-    const totState = createFactureTotauxState();
+    const totState = $state(createFactureTotauxState());
+
+    // ─── ToolTip Ligne Liste des Factures ──────────────────────────────────
+    let hoveredFacture = $state<Facture | null>(null);
+    let tooltipStyleF  = $state('');
+    let hideTimerF: ReturnType<typeof setTimeout> | undefined;
+    function onFactureRowEnter(e: MouseEvent, facture: Facture) {
+        clearTimeout(hideTimerF);
+        const rect     = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyleF  = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+        hoveredFacture = facture;
+    }
+    function onFactureRowMove(e: MouseEvent) {
+        if (!hoveredFacture) return;
+        clearTimeout(hideTimerF);
+        const rect    = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyleF = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+    }
+    function onFactureRowLeave() {
+        hideTimerF = setTimeout(() => { hoveredFacture = null; }, 300);
+    }
+    function onFactureTooltipEnter() { clearTimeout(hideTimerF); }
+    function onFactureTooltipLeave() {
+        hideTimerF = setTimeout(() => { hoveredFacture = null; }, 300);
+    }
 
     // ─── État réactif – Liste des documents 'Créables' ──────────────
     const documents = $derived.by(() => {
         const devis = data.affaire.devis;
         if (!devis) return ['Devis', 'Facture'];
-        const arr = devis.split('|');
+        const arr   = devis.split('|');
         if (arr.length > 1) {
             const result   = ['Devis'];
             const devisArr = arr.filter(Boolean);
@@ -141,10 +166,13 @@
     let deletingAffaire    = $state(false);
     let factureToDelete    = $state<Facture | null>(null);
     let factureToEncaisser: Facture | null = $state(null);
-    let showModalPdf   = $state(false);
-    let pdfFacture     = $state<Facture | null>(null);
-    function handleOpenPdf() {
+    let showModalPdf       = $state(false);
+    let pdfFacture         = $state<Facture | null>(null);
+
+    async function handleOpenPdf() {
         if (modalFactureFacture) {
+            // Toujours utiliser modalFactureFacture qui contient les mutations en cours
+            await tick();
             pdfFacture   = modalFactureFacture;
             showModalPdf = true;
         }
@@ -153,18 +181,18 @@
     // ─── Variables utilisées par la fonction conditionDeleteAnnulFacture ────────────────────────────────────
     type DeleteSituation =
         | { type: 'devis-simple' }
-        | { type: 'devis-seul';   fbId: number }
-        | { type: 'devis-et-fb';  fbId: number }
+        | { type: 'devis-seul';         fbId: number }
+        | { type: 'devis-et-fb';        fbId: number }
         | { type: 'fb-simple' }
         | { type: 'fb-avec-devis';      devId: number }
         | { type: 'fb-avec-facAcompte'; faId: number };
     let deleteSituation = $state<DeleteSituation | null>(null);
 
     // ─── Variables Modale Confirm ────────────────────────────────────
-    let confirmDeleteFactureVisible = $state(false);
-    let confirmDeleteFactureMessage = $state('');
-    let confirmAnnulFactureVisible  = $state(false);
-    let confirmAnnulFactureMessage  = $state('');
+    let confirmDeleteFactureVisible  = $state(false);
+    let confirmDeleteFactureMessage  = $state('');
+    let confirmAnnulFactureVisible   = $state(false);
+    let confirmAnnulFactureMessage   = $state('');
 
     // ─── Modale à 3 boutons (Devis en relation avec une Facture Brouillon) ──
     let choixSuppressionDevisVisible = $state(false);
@@ -198,7 +226,7 @@
             deletingAffaire = true;
             const resp = await fetch(formEl.action, {
                 method: 'POST',
-                body: new FormData(formEl),
+                body:    new FormData(formEl),
             });
             deletingAffaire = false;
             if (resp.ok) { closeDeleteAffaire(); window.location.href = '/affaire'; }
@@ -282,6 +310,9 @@
         } else {
             modalFactureDevisOptions = (data.affaire.devis ?? '').split('|').filter(Boolean);
         }
+        // ── Réinitialisation de totState ──────────────────────────────
+        const fresh = createFactureTotauxState();
+        Object.assign(totState, fresh);
         modalFactureMode    = 'update';
         modalFactureAction  = '';
         modalFactureFacture = { ...f };
@@ -307,25 +338,26 @@
                     // I.1.1 / I.1.2 — non Signé/Réglé (avec ou sans acompte : même comportement)
                     if (!f.refDevis) {
                         // I.1.1.1 / I.1.2.1
-                        deleteSituation = { type:'devis-simple' };
+                        deleteSituation             = { type:'devis-simple' };
                         confirmDeleteFactureMessage = "Confirmez-vous la Suppression de ce Devis ?";
                         confirmDeleteFactureVisible = true;
                     } else {
                         // I.1.1.2 / I.1.2.2 — en relation avec une Facture Brouillon
                         const fb = data.factures.find(fac => fac.codeType === 30 && fac.refFac === f.refDevis);
                         if (fb) {
-                            fbEnRelationId = fb.id;
+                            fbEnRelationId               = fb.id;
                             choixSuppressionDevisMessage = "Le Devis à supprimer est en relation avec la 'Facture Brouillon' (" + fb.refFac + "). Que souhaitez-vous faire ?";
                             choixSuppressionDevisVisible = true;
                         }
                     }
                 } else {
                     // I.2 — Devis Signé/Réglé
-                    if (f.statut.includes('Devis Signé')) {
+                    const statut = String(f.statut ?? '');
+                    if (statut.includes('Devis Signé')) {
                         alerteTitre   = "Information sur la Suppression du Devis";
                         alerteMessage = "Par soucis de cohérence, vous devez d'abord Annuler la Facture d'Imputation (" + f.refDevis + ") avant de Supprimer ce Devis";
                         alerteVisible = true;
-                    } else if (f.statut.includes('Devis Acompte Réglé')) {
+                    } else if (statut.includes('Devis Acompte Réglé')) {
                         alerteTitre   = "Information sur la Suppression du Devis";
                         alerteMessage = "Par soucis de cohérence, vous devez d'abord Annuler la Facture d'Acompte (" + f.refDevis + ") avant de Supprimer ce Devis";
                         alerteVisible = true;
@@ -334,25 +366,22 @@
                 break;
             }
             // ─── Suppression d'une Facture "Brouillon" ─────────────────
-            case f.codeType == 30 && [13, 14, 15, 16].includes(f.statutCode): {
-                if (!f.refDevis && !f.refPre) {
-                    // II.1
-                    deleteSituation = { type:'fb-simple' };
+            case f.codeType == 30 && [13, 14, 15, 16].includes(Number(f.statutCode)): {
+                if (!f.refDevis && !f.refPre) { // II.1
+                    deleteSituation             = { type:'fb-simple' };
                     confirmDeleteFactureMessage = "Confirmez-vous la Suppression de cette 'Facture Brouillon' ?";
                     confirmDeleteFactureVisible = true;
-                } else if (f.refDevis && !f.refPre) {
-                    // II.2.1
+                } else if (f.refDevis && !f.refPre) { // II.2.1
                     const dev = data.factures.find(fac => fac.codeType === 10 && fac.refFac === f.refDevis);
                     if (dev) {
-                        deleteSituation = { type:'fb-avec-devis', devId:dev.id };
+                        deleteSituation             = { type:'fb-avec-devis', devId:dev.id };
                         confirmDeleteFactureMessage = "Confirmez-vous la Suppression de cette 'Facture Brouillon' ?";
                         confirmDeleteFactureVisible = true;
                     }
-                } else if (!f.refDevis && f.refPre) {
-                    // II.2.2
+                } else if (!f.refDevis && f.refPre) { // II.2.2
                     const fa = data.factures.find(fac => fac.codeType === 20 && fac.refFac === f.refPre);
                     if (fa) {
-                        deleteSituation = { type:'fb-avec-facAcompte', faId:fa.id };
+                        deleteSituation             = { type:'fb-avec-facAcompte', faId:fa.id };
                         confirmDeleteFactureMessage = "Confirmez-vous la Suppression de cette 'Facture Brouillon' ?";
                         confirmDeleteFactureVisible = true;
                     }
@@ -361,12 +390,12 @@
             }
             // ─── Tentative d'Annulation ────────────────────────────
             case (f.codeType == 20 || f.codeType == 30) && f.statutCode == 1 : // d'une Facture déjà Annulée ----
-                alerteTitre = "Annulation non autorisée";
+                alerteTitre   = "Annulation non autorisée";
                 alerteMessage =  "Cette Facture est déjà Annulée et ne peut l'être de nouveau.";
                 alerteVisible = true;
                 break;
             case f.codeType == 40 : // d'une Facture d'Avoir -------
-                alerteTitre = "Annulation non autorisée";
+                alerteTitre   = "Annulation non autorisée";
                 alerteMessage = "Conformément à la Réglementation fiscale et comptable, cette Facture d’Avoir ne peut être ni Supprimée, ni Annulée.";
                 alerteVisible = true;
                 break;
@@ -375,30 +404,30 @@
                 if (f.refPre != '' && f.refPre != null) {
                     const facImput = data.factures.find(fi => fi.codeType == 30 && fi.refPre === f.refFac);
                     if (facImput && facImput.refFac.slice(0, 2) == 'FB') {
-                        annulationSituation = { type: 'acompte-avec-fb', fbId: facImput.id };
+                        annulationSituation        = { type: 'acompte-avec-fb', fbId: facImput.id };
                         confirmAnnulFactureMessage = "L'Annulation de cette Facture d'Acompte créera automatiquement une Facture d'Avoir.<br>De plus, cet Acompte ayant été imputé sur la `Facture Brouillon` (" + facImput.refFac + "), cette dernière sera Supprimée.<br> Confirmez-vous l'Annulation de cette Facture d'Acompte ?";
                         confirmAnnulFactureVisible = true;
                     } else {
                         alerteTitre   = "Information sur l'Annulation de la Facture d'Acompte";
-                        alerteMessage = "Par soucis de cohérence, avant d'Annuler cette Facture d'Acompte, il convient d'Annuler d'abord la Facture d'Imputation (" + f.refFac + ") de cette Acompte.";
+                        alerteMessage = "Par soucis de cohérence, avant d'Annuler cette Facture d'Acompte, il convient d'Annuler d'abord la Facture d'Imputation (" + f.refPre + ") de cette Acompte.";
                         alerteVisible = true;
                     }
                 } else {
-                    annulationSituation = { type: 'acompte-simple' };
-                    confirmAnnulFactureMessage = "L'Annulation de cette Facture d'Acompte créera automatiquement une Facture d'Avoir.<br> Confirmez-vous son Annulation ?";
+                    annulationSituation        = { type: 'acompte-simple' };
+                    confirmAnnulFactureMessage = "Confirmez-vous l'Annulation de cette Facture d'Acompte (cette opération est irréversible) ?<br> N.B. Dans l'affirmative, une Facture d'Avoir sera créée.";
                     confirmAnnulFactureVisible = true;
                 }
                 break;
             }
             // Annulation d'une "Facture Validée" autre qu'une Facture d’Acompte ────────────────────────────
-            case f.codeType == 30 && [22, 23, 24, 25, 26, 27, 28].includes(f.statutCode): {
+            case f.codeType == 30 && [22, 23, 24, 25, 26, 27, 28].includes(Number(f.statutCode)): {
                 const facAcompte = (f.refPre != '' && f.refPre != null)
                     ? data.factures.find(fa => fa.codeType == 20 && fa.refPre === f.refFac)
                     : undefined;
                 annulationSituation = facAcompte
                     ? { type: 'validee-avec-facAcompte', faId: facAcompte.id }
                     : { type: 'validee-simple' };
-                confirmAnnulFactureMessage = "L'Annulation de cette Facture créera automatiquement une Facture d'Avoir.<br> Confirmez-vous son Annulation ?";
+                confirmAnnulFactureMessage = "Confirmez-vous l'Annulation de cette Facture (cette opération est irréversible) ?<br> N.B. Dans l'affirmative, une Facture d'Avoir sera créée.";
                 confirmAnnulFactureVisible = true;
             }
         };
@@ -415,8 +444,42 @@
     // ─────────────────────────────────────────────────────────────────────────────
     // Affichage de la Modal de l'Option PDF à choisir
     // ─────────────────────────────────────────────────────────────────────────────
-    function openModalChoixPdf(f: Facture) {
-        pdfFacture   = f;
+    async function openModalChoixPdf(f: Facture) {
+        const fresh = createFactureTotauxState();
+        Object.assign(totState, fresh);
+        const fac = data.factures.find(fa => fa.refFac === f.refFac);
+        if (!fac) return;
+        if (fac.codeType === 30 && fac.refPre) {
+            const facAcompte = data.factures.find(fa => fa.refFac === fac.refPre);
+            if (facAcompte) {
+                totState.imputAcomp0     = fac.regimeTva !== 'B' ? '2' : '3';
+                totState.acompteId0      = facAcompte.id;
+                totState.acompPresta0    = String(facAcompte.totPrestaHt ?? '0,00');
+                totState.acompVente0     = String(facAcompte.totVenteHt  ?? '0,00');
+                if (fac.regimeTva === 'B' && facAcompte.total) {
+                    totState.acompMontArray0 = facAcompte.total.split('|').map((row: string) => {
+                        const lig = row.split('¤');
+                        return `${lig[0] ?? ''}¤${lig[2] ?? '0,00'}`;
+                    });
+                }
+            }
+        }
+        if (fac.codeType === 20) {
+            traitColSpan(fac, totState);
+            traitLibTotaux(fac, totState);
+            traitLibBasPage(fac, totState);
+        } else if (fac.codeType === 30 && parseFloat(String(fac.imputCreCli ?? '0').replace(',', '.')) > 0) {
+            // ← Facture brouillon avec imputation : ne pas recalculer facture.total
+            traitLibTotaux(fac, totState);
+            traitColSpan(fac, totState);
+            totState.colSpanTot0 += 1;
+            traitLibBasPage(fac, totState);
+        } else {
+            traitLigneTotal(fac, totState);
+            traitLibBasPage(fac, totState);
+        }
+        await tick();
+        pdfFacture   = fac;
         showModalPdf = true;
     }
     const libType: Record<string, string> = {
@@ -437,8 +500,8 @@
         confirmDeleteFactureVisible = false;
         if (factureToDelete && deleteSituation) await deleteFacture(factureToDelete, supprAnnulCtx, deleteSituation);
     }}
-    onannuler={() => confirmDeleteFactureVisible = false} />
-
+    onannuler={() => confirmDeleteFactureVisible = false}
+/>
 <!-- Confirmation suppression Devis/Facture brouillon (3 boutons)  -->
 <ModalConfirm bind:visible={choixSuppressionDevisVisible} titre="Suppression du Devis" message={choixSuppressionDevisMessage}
     labelConfirm = "Supprimer le Devis et la Facture Brouillon"
@@ -459,14 +522,13 @@
     onannuler={() => { choixSuppressionDevisVisible = false; fbEnRelationId = null; }}
 />
 <!-- Confirmation annulation Facture validée -->
-<ModalConfirm bind:visible={confirmAnnulFactureVisible}
-    titre="Annulation de la Facture" message={confirmAnnulFactureMessage} labelConfirm="Annuler la Facture"
+<ModalConfirm bind:visible={confirmAnnulFactureVisible} titre="Annulation de la Facture" message={confirmAnnulFactureMessage} labelConfirm="Confirmer l'Annulation" maxWidth="1000px"
     onconfirm={async () => {
         confirmAnnulFactureVisible = false;
         if (factureToDelete && annulationSituation) await annulationFacture(factureToDelete, supprAnnulCtx, annulationSituation);
     }}
-    onannuler={() => { confirmAnnulFactureVisible = false; annulationSituation = null; }} />
-
+    onannuler={() => { confirmAnnulFactureVisible = false; annulationSituation = null; }}
+/>
 {#if mounted}
     <div class="facture-page" in:fade="{{ duration:1500 }}">
         <!-- ===== EN-TÊTE ===== -->
@@ -479,7 +541,7 @@
             <!-- 3 – Créer un document (centré) -->
             <div style="position:absolute;left:50%;transform:translateX(-50%)">
                 <select class="sg-select" style="margin-top:32px" onchange={onHandleSelectCreate}>
-                    <option value="" disabled selected hidden>Créer un Nouveau Devis/Facture …</option>
+                    <option value="" disabled selected hidden>Créer un Nouveau Devis ou une Nouvelle Facture …</option>
                     {#each documents as document (document)}
                         <option value={document}>{document}</option>
                     {/each}
@@ -514,7 +576,8 @@
                         </tr>
                     {:else}
                         {#each data.factures as facture (facture.id)}
-                        <tr class="sg-trSha">
+                            <tr class="sg-trSha {hoveredFacture?.id === facture.id ? 'sg-trSha--hovered' : ''}" onmouseenter={(e)=>{clearTimeout(hideTimerF);onFactureRowEnter(e, facture)}}
+                                onmousemove={onFactureRowMove} onmouseleave={onFactureRowLeave}>
                                 <td><span class="badge-type badge-type--{facture.codeType}">{libType[facture.codeType] ?? facture.codeType}</span></td>
                                 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                                 <td>{@html facture.statut}</td>
@@ -524,23 +587,30 @@
                                 <td class="col-montant">{formatMontant(facture.totTtc)}</td>
                                 <td class="col-montant col-regle">{formatMontant(facture.totRegl)}</td>
                                 <td class="col-montant col-solde">{formatMontant(facture.solde)} </td>
-                                <td class="sg-tdOverlay">
-                                    <div class="sg-rowActions">
-                                        <button class="sg-btn" data-tooltip="Télécharger la version PDF" onclick={()=>openModalChoixPdf(facture)}><img style="height:18px" src="/pdf.png" alt="PDF"/></button>
-                                        {#if afficheIconModifier(facture)}
-                                            <button class="sg-btn" data-tooltip="Editer le document" onclick={()=>conditionUpdateFacture(facture)}><img style="height:18px" src="/pencil.png" alt="Modifier"/></button>
-                                        {/if}
-                                        {#if afficheIconEncaissement(facture)}
-                                            <button class="sg-btn" data-tooltip="Enregistrer un Encaissement" onclick={()=>openEncaissement(facture)}><img style="height:18px" src="/money.png" alt="Encaissement"/></button>
-                                        {/if}
-                                        <button class="sg-btn" data-tooltip="Supprimer le document" onclick={()=>conditionDeleteAnnulFacture(facture)}><img style="height:18px" src="/trash.png" alt="Supprimer"/></button>
-                                    </div>
-                                </td>
                             </tr>
                         {/each}
                     {/if}
                 </tbody>
             </table>
+            {#if hoveredFacture}
+                {@const hovered = hoveredFacture}
+                <div role="toolbar" tabindex="-1"style="position:fixed;{tooltipStyleF};z-index:100;display:flex;gap:13px;padding:4px 12px;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.12);pointer-events:auto"
+                    onmouseenter={onFactureTooltipEnter} onmouseleave={onFactureTooltipLeave}>
+                    <button class="sg-btn ttBtn" data-tooltip={hovered.codeType === 10 ? "Supprimer le Devis"
+                                        : hovered.refFac.slice(0, 2) === 'FB' ? "Supprimer la Facture Brouillon"
+                                        : hovered.codeType === 20 ? "Annuler la Facture d'Acompte" : "Annuler la Facture"} onclick={()=>conditionDeleteAnnulFacture(hovered)}><img src="/trash.png" alt="Supprimer"/>
+                    </button>
+                    {#if afficheIconModifier(hovered)}
+                        <button class="sg-btn ttBtn" data-tooltip={hovered.codeType === 10 ? "Editer le Devis" : "Editer/Valider la Facture Brouillon"} onclick={()=>conditionUpdateFacture(hovered)}>
+                            <img src="/pencil.png" alt="Modifier"/>
+                        </button>
+                    {/if}
+                    {#if afficheIconEncaissement(hovered)}
+                        <button class="sg-btn ttBtn" data-tooltip="Enregistrer un Encaissement" onclick={()=>openEncaissement(hovered)}><img src="/money.png" alt="Encaissement"/></button>
+                    {/if}
+                    <button class="sg-btn ttBtn" data-tooltip="Télécharger la version PDF" onclick={()=>openModalChoixPdf(hovered)}><img src="/pdf.png" alt="PDF"/></button>
+                </div>
+            {/if}
         </div>
     </div>
 {/if}
@@ -555,7 +625,7 @@
 {#if showModalFacture}
     <ModalFacture affaireId={data.affaire.id} clientId={data.affaire.clientId ?? 0} affaire={data.affaire} mode={modalFactureMode} action={modalFactureAction}
                   bind:facture={modalFactureFacture} clients={data.clients} client={data.client} factures={data.factures} abonne={data.abonne} devisOptions={modalFactureDevisOptions}
-                  tarifs={data.tarifs ?? []} statutRaw={data.statutRaw} onclose={closeModalFacture} onrefresh={()=>invalidate('app:affaire')} {totState} onOpenPdf={handleOpenPdf}/>
+                  tarifs={data.tarifs ?? []} statutRaw={data.statutRaw} onclose={closeModalFacture} onrefresh={async()=>{ await invalidate('app:affaire')}} {totState} onOpenPdf={handleOpenPdf}/>
 {/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════
@@ -624,12 +694,12 @@
 ════════════════════════════════════════════════════════════════════════ -->
 {#if factureToEncaisser}
     <ModalEncaissement facture={factureToEncaisser} factures={data.factures} recette={createRecetteVide()} recettes={recettes} affaire={data.affaire} abonne={data.abonne} onclose={closeEncaissement}
-                        onrefresh={()=>{invalidate('app:affaire')}} />
+                        onrefresh={async()=>{ await invalidate('app:affaire')}} />
 {/if}
 
 <!--Affichage Choix du type de PDF / Factur-X -->
 {#if showModalPdf && pdfFacture}
-    <ModalChoixPdf facture={pdfFacture} abonne={data.abonne} {totState} libAffaire={data.affaire.libAffaire} onclose={() => {showModalPdf=false; pdfFacture=null}}/>
+    <ModalChoixPdf facture={pdfFacture} abonne={data.abonne} totState={totState} libAffaire={data.affaire.libAffaire} onclose={()=>{showModalPdf=false; pdfFacture=null}}/>
 {/if}
 
 <style>
@@ -768,4 +838,24 @@
     }
     .btn-delete-confirm:hover:not(:disabled) { background: #b91c1c; }
     .btn-delete-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Boutons du Tooltip d'actions ---------- */
+    .ttBtn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        margin: 0;
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .ttBtn img {
+        display: block;
+        width: 17px;
+        height: 17px;
+    }
 </style>

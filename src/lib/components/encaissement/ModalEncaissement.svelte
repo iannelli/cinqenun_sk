@@ -1,18 +1,18 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import type { Facture }                          from '$lib/schemas/facture';
-    import { parseClientFacture, createFactureVide } from '$lib/schemas/facture';
-    import type { Recette }                          from '$lib/schemas/recette';
-    import type { Affaire }                          from '$lib/schemas/affaire';
-    import type { Abonne }                           from '$lib/schemas/abonne';
+    import { onMount, onDestroy }  from 'svelte';
+    import { deserialize }         from '$app/forms';
+    import { type Facture, parseClientFacture, createFactureVide } from '$lib/schemas/facture';
+    import type { Recette }                                        from '$lib/schemas/recette';
+    import type { Affaire }                                        from '$lib/schemas/affaire';
+    import type { Abonne }                                         from '$lib/schemas/abonne';
     import { numberToFrStr, formatDate, formatMontant } from '$lib/utils/format';
     import { numericDecimal }                           from '$lib/utils/numeric';
     import { drawerInfoUtils }                          from '$lib/utils/drawerInfo';
-    import { fiscPena }                                 from '$lib/utils/messageInfo';
+    import { fiscPena, excedent }                       from '$lib/utils/messageInfo';
     import ModalConfirm                                 from '$lib/components/ModalConfirm.svelte';
     import { createFacAcompteRec, prepaRecetteInitTva, prepaRecetteInitFranchise, prepaRecetteComplTva, prepaRecetteComplFranchise } from '$lib/components/encaissement/encaissement';
-    import { rt }                  from '$lib/stores/encaissementStore.svelte';
-    import { deserialize }         from '$app/forms';
+    import { rt }                                       from '$lib/stores/encaissementStore.svelte';
+   
 
     // ─── Props ────────────────────────────────────────────────────
     let {
@@ -25,14 +25,14 @@
         onclose,
         onrefresh,
     }: {
-        facture  : Facture;
-        factures : Facture[];
-        recette  : Recette;
-        recettes : Recette[];
-        affaire  : Affaire;
-        abonne   : Abonne;
-        onclose  : () => void;
-        onrefresh : () => void;
+        facture   : Facture;
+        factures  : Facture[];
+        recette   : Recette;
+        recettes  : Recette[];
+        affaire   : Affaire;
+        abonne    : Abonne;
+        onclose   : () => void;
+        onrefresh : () => Promise<void>;
     } = $props();
     
     let Ope0 = $state('');
@@ -70,6 +70,7 @@
     let facColorSolde0          = $state('');
     let facTotalRecetteArray0   = $state<string[]>([]);
     let facColorExcedent0       = $state('');
+    let isExcedent = $state(false);
     let modeEncaissements       = $state(["Virement", "Carte Bancaire", "Chèque", "Espèce", "Prélèvement"]);
 
     // ─── ModalConfirm ───────────────────────────────────────────────
@@ -78,6 +79,34 @@
     let vueConfirmAbandonSaisieEncais = $state(false);
 
     let recetteLocale = $state({ ...recette });
+
+    // ─── ToolTip Ligne d'Encaissement ────────────────────────────
+    let hoveredRecette    = $state<Recette | null>(null);
+    let hoveredRecetteIndex = $state(-1);
+    let tooltipStyleR    = $state('');
+    let hideTimerR: ReturnType<typeof setTimeout> | undefined;
+    function onRecetteRowEnter(e: MouseEvent, recette: Recette, r: number) {
+        clearTimeout(hideTimerR);
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyleR    = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+        hoveredRecette    = recette; // ← mise à jour immédiate
+        hoveredRecetteIndex = r;
+    }
+    function onRecetteRowMove(e: MouseEvent) {
+        if (!hoveredRecette) return;
+        clearTimeout(hideTimerR);
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyleR = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+    }
+    function onRecetteRowLeave() {
+        hideTimerR = setTimeout(() => { hoveredRecette = null; hoveredRecetteIndex = -1; }, 300);
+    }
+    function onRecetteTooltipLeave() {
+        hideTimerR = setTimeout(() => { hoveredRecette = null; hoveredRecetteIndex = -1; }, 300);
+    }
+    function onRecetteTooltipEnter() {
+        clearTimeout(hideTimerR);
+    }
 
     onMount(() => {
         dialog?.showModal();
@@ -150,11 +179,20 @@
     }
 
     // ─── Modal d'Information ─────────────────────────────────────────
-    function modalInfo(): void {
-        drawerInfoUtils.ouvrir({
-            titre:   "Informations sur la Fiscalité des Pénalités de retard",
-            message: fiscPena,
-        });
+    function modalInfo(origine:number): void {
+        if (origine == 1) {
+            drawerInfoUtils.ouvrir({
+                titre:   "Encaissement Excédentaire : Conséquences Fisacles et Sociales",
+                message: excedent,
+                largeur: '900px',
+             });
+        } else {
+            drawerInfoUtils.ouvrir({
+                 titre:   "Informations sur la Fiscalité des Pénalités de retard",
+                message: fiscPena,
+                largeur: '500px',
+            });
+        }
     }
 
     // ─── Initialisation des données de la Création d'une Recette avant Ouverture du Formulaire de Saisie ( Div d`Encaissement ] ──────────────────
@@ -163,32 +201,32 @@
         Ope0 = '';
         titreSaisieEncaissement = "Création d`un Encaissement";
         recetteLocale.dateEmis  = facture.dateEmis;
-        dateInputEncais   = '';
-        recetteLocale.refFac= facture.refFac;
-        recetteLocale.cliNom= parseClientFacture(facture.client)?.libClient0 ?? '';
+        dateInputEncais         = '';
+        recetteLocale.refFac    = facture.refFac;
+        recetteLocale.cliNom    = parseClientFacture(facture.client)?.libClient0 ?? '';
         recetteLocale.libelle   = affaire.libAffaire;
         recetteLocale.regimeTva = facture.regimeTva;
         recetteLocale.modeRegl  = '';
-        rt.saisiAImputer0 = '0,00';
-        inputColor= 'black';
-        elemNonOk = false;
-        vuDivSaisieEncais = 'saisieEncais';
+        rt.saisiAImputer0       = '0,00';
+        inputColor              = 'black';
+        elemNonOk               = false;
+        vuDivSaisieEncais       = 'saisieEncais';
     }
 
     // Modification du Mode d'Encaissement ────────────────────────────
     function editRecette(rec: Recette) {
         Ope0 = 'U';
-        recetteLocale = { ...rec };  // ← copie dans la variable réactive
-        marginBottom = 110;
+        recetteLocale           = { ...rec };  // ← copie dans la variable réactive
+        marginBottom            = 110;
         titreSaisieEncaissement = "Modification du mode d`Encaissement";
-        modeEncaissements = ["Virement", "Carte Bancaire", "Chèque", "Espèce", "Prélèvement"];
-        elemNonOk = true;
-        inputColor = '#D1D1D1';
-        btnNonOk = false;
-        const d = new Date(rec.dateEmis);
-        dateInputEncais = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        rt.saisiAImputer0 = String(rec.montRegl ?? '0,00');
-        vuDivSaisieEncais = 'saisieEncais';
+        modeEncaissements       = ["Virement", "Carte Bancaire", "Chèque", "Espèce", "Prélèvement"];
+        elemNonOk               = true;
+        inputColor              = '#D1D1D1';
+        btnNonOk                = false;
+        const d                 = new Date(rec.dateEmis);
+        dateInputEncais         = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        rt.saisiAImputer0       = String(rec.montRegl ?? '0,00');
+        vuDivSaisieEncais       = 'saisieEncais';
     }
 
     // Vérification des données de la Saisie d'un Encaissement ─────────────────
@@ -205,11 +243,7 @@
                 const result   = deserialize(await response.text());
                 if (result.type === 'success') {
                     afficherBandeau("Mode de règlement mis à jour avec succès.", true, 3000);
-                    rt.selRecettes = rt.selRecettes.map(r =>
-                        r.id === recetteLocale.id
-                            ? { ...r, modeRegl: recetteLocale.modeRegl }
-                            : r
-                    );
+                    rt.selRecettes = rt.selRecettes.map(r => r.id === recetteLocale.id ? { ...r, modeRegl: recetteLocale.modeRegl } : r);
                     onrefresh();
                     setTimeout(() => { onclose(); }, 2000);
                 } else {
@@ -265,11 +299,11 @@
                         return;
                     }
                     if (recetteId) recetteLocale.id = recetteId;
-                    facture.statutCode = 20;
-                    facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
+                    //facture.statutCode = 20;
+                    //facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
                     rt.selRecettes     = [...rt.selRecettes, { ...recetteLocale }];
-                    afficherBandeau("Encaissement enregistré avec succès.", true, 3000);
-                    onrefresh();
+                    afficherBandeau("Encaissement enregistré avec succès.", true, 2000);
+                    await onrefresh();
                     setTimeout(() => { onclose(); }, 2000);
                 }
                 // Création de la Recette relative au Règlement de la Facture ────────────
@@ -284,7 +318,7 @@
                         if (devisLie) {
                             devisLie.statutCode = 20;
                             devisLie.statut     = "<mark style='background:white;color:#0488fd'>Devis Signé";
-                            const fdDevisLie = new FormData();
+                            const fdDevisLie    = new FormData();
                             fdDevisLie.append('factureId',  String(devisLie.id));
                             fdDevisLie.append('statutCode', String(devisLie.statutCode));
                             fdDevisLie.append('statut',     devisLie.statut);
@@ -310,18 +344,21 @@
     }
 
     function afficheDiffSaisieEncais() {
+        isExcedent = false;   // ← reset par défaut
         if (facture.codeType == 10) {
             messageDiffSaisieEncais = "Le montant saisi (" + rt.saisiAImputer0 + ") est différent du montant Du (" + rt.facMontantDu0 + ").</br>";
             messageDiffSaisieEncais += "Confirmez-vous cette différence ?";
         }
         if (facture.codeType == 30) {
-            let dif = Number(rt.saisiAImputer0.replace(/[,]/, '.')) - Number(rt.facMontantDu0.replace(/[,]/, '.'));
-            let dif1 = dif.toFixed(2).replace(/[.]/, ',');
+            const dif  = Number(rt.saisiAImputer0.replace(/\s/g, '').replace(',', '.')) - Number(rt.facMontantDu0.replace(/\s/g, '').replace(',', '.'));
+            const dif1 = dif.toFixed(2).replace('.', ',');
             if (dif > 0) {
+                isExcedent = true;
                 messageDiffSaisieEncais = "Le montant saisi (" + rt.saisiAImputer0 + ") excède le `montant Du` (" + rt.facMontantDu0 + ").</br>";
                 messageDiffSaisieEncais += "Si cet excédent de " + dif1 + "€ est confirmé, il sera porté au Crédit du Compte du Client</br>";
-                messageDiffSaisieEncais += "Il vous sera possible, soit de rembourser ce crédit via l’écran `Compte Client`,</br>";
-                messageDiffSaisieEncais += "soit de l'imputer sur le `Total Du` lors de la prochaine facturation de ce Client.</br>";
+                messageDiffSaisieEncais += "Il vous sera possible :</br>";
+                messageDiffSaisieEncais += "- si vous le remboursez, de saisir ce remboursement via l’écran `Compte Client`,</br>";
+                messageDiffSaisieEncais += "- sinon d'imputer ce Crédit sur le `Total Du` lors de la prochaine facturation de ce Client.</br>";
                 messageDiffSaisieEncais += "Confirmez-vous cet excédent ?";
             }
             if (dif < 0) {
@@ -356,12 +393,12 @@
                 return;
             }
             if (recetteId) recetteLocale.id = recetteId;
-            facture.statutCode = 20;
-            facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
+            //facture.statutCode = 20;
+            //facture.statut     = "<mark style='background:white;color:#0488fd'>Devis Acompte Réglé";
             rt.selRecettes      = [...rt.selRecettes, { ...recetteLocale }];
             afficherBandeau("Encaissement enregistré avec succès.", true, 2000);
             onrefresh();
-            setTimeout(() => { onclose(); }, 2000);   // ← ajout
+            setTimeout(() => { onclose(); }, 2000);
         }
 
         // FACTURE : Constitution d'une occurrence de Recette -----
@@ -391,23 +428,23 @@
             fd.append('refFac',        recetteLocale.refFac);
             fd.append('cliNom',        recetteLocale.cliNom);
             fd.append('libelle',       recetteLocale.libelle);
-            fd.append('regimeTva',     recetteLocale.regimeTva  ?? '');
+            fd.append('regimeTva',     recetteLocale.regimeTva               ?? '');
             fd.append('modeRegl',      recetteLocale.modeRegl);
-            fd.append('montRegl',      recetteLocale.montRegl   ?? '0,00');
-            fd.append('montHt',        recetteLocale.montHt     ?? '0,00');
-            fd.append('ventilTva',     recetteLocale.ventilTva  ?? '');
-            fd.append('montTva',       recetteLocale.montTva    ?? '0,00');
-            fd.append('montTtc',       recetteLocale.montTtc    ?? '0,00');
-            fd.append('debours',       recetteLocale.debours    ?? '0,00');
-            fd.append('penalite',      recetteLocale.penalite   ?? '0,00');
-            fd.append('nature',        recetteLocale.nature     ?? '');
+            fd.append('montRegl',      recetteLocale.montRegl                ?? '0,00');
+            fd.append('montHt',        recetteLocale.montHt                  ?? '0,00');
+            fd.append('ventilTva',     recetteLocale.ventilTva               ?? '');
+            fd.append('montTva',       recetteLocale.montTva                 ?? '0,00');
+            fd.append('montTtc',       recetteLocale.montTtc                 ?? '0,00');
+            fd.append('debours',       recetteLocale.debours                 ?? '0,00');
+            fd.append('penalite',      recetteLocale.penalite                ?? '0,00');
+            fd.append('nature',        recetteLocale.nature                  ?? '');
             fd.append('factureId',     String(facture.id));
             fd.append('clientId',      String(facture.clientId));
             fd.append('affaireId',     String(affaire.id));
-            fd.append('totRegl',       String(facture.totRegl       ?? 0));
-            fd.append('montCli',       String(facture.montCli       ?? 0));
-            fd.append('solde',         String(facture.solde         ?? 0));
-            fd.append('soldePenalite', String(facture.soldePenalite ?? 0));
+            fd.append('totRegl',       String(facture.totRegl                ?? 0));
+            fd.append('montCli',       String(facture.montCli                ?? 0));
+            fd.append('solde',         String(facture.solde                  ?? 0));
+            fd.append('soldePenalite', String(facture.soldePenalite          ?? 0));
             try {
                 const response = await fetch('/recette?/createRecette', { method: 'POST', body: fd });
                 const result    = deserialize(await response.text());
@@ -441,19 +478,19 @@
 </script>
 <!-- ModalConfirm ────────────────────────  -->
 {#if vueDiffSaisieEncais}
-    <ModalConfirm bind:visible={vueDiffSaisieEncais} titre="Encaissement : Montant Saisie Différent du Montant Dû" message={messageDiffSaisieEncais} labelConfirm="Confirmer"
-        onconfirm={() => confirmDiffSaisieEncais()}
-        onannuler={() => {vueDiffSaisieEncais=false}}/>
+    <ModalConfirm bind:visible={vueDiffSaisieEncais} titre={isExcedent ? "Encaissement : Montant Saisi Supérieur au Montant Dû" : "Encaissement : Montant Saisi Différent du Montant Dû"}
+        message={messageDiffSaisieEncais} labelConfirm="Confirmer" maxWidth="700px" onconfirm={()=>confirmDiffSaisieEncais()} onannuler={()=>{vueDiffSaisieEncais=false}}>
+        {#if isExcedent}
+            <button type="button" onclick={()=>modalInfo(1)} title="Informations sur les encaissements excédentaires" style="background:none;border:none;padding:0;cursor:pointer;line-height:0;vertical-align:middle;margin-left:6px;margin-top:-1px">
+                <img src="/question.png" alt="Informations" width="18px" height="18px"/>
+            </button>
+        {/if}
+    </ModalConfirm>
 {/if}
 {#if vueConfirmAbandonSaisieEncais}
-    <ModalConfirm
-        bind:visible={vueConfirmAbandonSaisieEncais}
-        titre="Abandon de la saisie"
+    <ModalConfirm bind:visible={vueConfirmAbandonSaisieEncais} titre="Abandon de la saisie"
         message={Ope0 === 'U' ? "Confirmez-vous l'Abandon de la Modification ?" : "Confirmez-vous l'Abandon de la Saisie ?"}
-        labelAnnuler = "Non"
-        labelConfirm = "Confirmer"
-        onconfirm={() => { vueConfirmAbandonSaisieEncais = false; vuDivSaisieEncais = ''; }}
-        onannuler={() => vueConfirmAbandonSaisieEncais = false}/>
+        labelAnnuler="Non" labelConfirm="Confirmer" onconfirm={()=>{vueConfirmAbandonSaisieEncais=false;vuDivSaisieEncais=''}} onannuler={()=>vueConfirmAbandonSaisieEncais=false}/>
 {/if}
 
 <!-- Formulaire d'Encaissement : Devis ou Facture -->
@@ -521,7 +558,7 @@
                     {#if Number(facture.soldeStr.replace(/[,]/, '.')) != 0 && Number(facture.soldePenaliteStr.replace(/[,]/, '.')) != 0}
                         <td style="font-size:14px !important">
                             <div style="display:flex;flex-direction:row;justify-content:center">{facture.soldePenalite}
-                                <button type="button" onclick={()=>modalInfo()} title="Informations sur la Fiscalité des Pénalités de retard" style="background:none;border:none;padding:0;cursor:pointer;line-height:0">
+                                <button type="button" onclick={()=>modalInfo(2)} title="Informations sur la Fiscalité des Pénalités de retard" style="background:none;border:none;padding:0;cursor:pointer;line-height:0">
                                     <img src="/question.png" alt="Informations" width="20px" height="20px"/>
                                 </button>
                             </div>
@@ -568,8 +605,11 @@
             </div>
         {:else} <!--  Liste des Encaissements  -->
             <div class="divRecette" style="width:100%">
-                <div style="display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:13px;margin:0 3px;opacity:0.8">
+                <div style="position:relative;display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:13px;margin:0 3px;opacity:0.8">
                     <hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-right:5px"/>Liste des Encaissements<hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-left:5px"/>
+                    {#if (facture.codeType == 10 && facture.acompMont != '0,00') || (facture.codeType == 30 && (facture.soldeStr != '0,00' || facture.montCliStr != '0,00')) || (facture.codeType == 40 && facture.montCliStr != '0,00')}
+                        <button type="button" class="sg-link" style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-weight:600;white-space:nowrap;background:white;padding:0 6px;margin-top:-5px; margin-right:10px" onclick={()=>initRecette()}>+ Saisir un Nouvel Encaissement</button>
+                    {/if}
                 </div>
                 <table id="tableRecette" class="tableRecette">
                     <thead>
@@ -577,31 +617,30 @@
                             <th style="width:30%">Date</th>
                             <th style="width:40%">Mode</th>
                             <th style="width:30%">Montant</th>
-                            {#if (facture.codeType == 10 && facture.acompMont != '0,00') || (facture.codeType == 30 && (facture.soldeStr != '0,00' || facture.montCliStr != '0,00')) ||  (facture.codeType == 40 && facture.montCliStr != '0,00')}
-                                <th style="min-width:160px"><button type="button" class="sg-link" onclick={()=>initRecette()}>Nouvel Encaissement</button></th>
-                            {:else}
-                                <th style="min-width:60px"></th>
-                            {/if}
                         </tr>
                     </thead>
                     <tbody>
                         {#if rt.selRecettes.length != 0}
                             {#each rt.selRecettes as recette, r (recette.id)}
-                                <tr class="sg-trSha" style="height:30px">
+                                <tr class="sg-trSha {hoveredRecette?.id === recette.id ? 'sg-trSha--hovered' : ''}" style="height:30px;cursor:pointer" onmouseenter={(e)=>{clearTimeout(hideTimerR);onRecetteRowEnter(e, recette, r)}} onmousemove={onRecetteRowMove} onmouseleave={onRecetteRowLeave}>
                                     <td>{formatDate(recette.dateRegl)}</td>
                                     <td>{recette.modeRegl}</td>
                                     <td>{formatMontant(recette.montRegl)}</td>
-                                    <td class="sg-tdBtn" style="height:30px">
-                                        <button class="sg-btn" title="Editer l`Encaissement" onclick={()=>editRecette(recette)}><img src="/pencil.png" alt=""/></button>
-                                        {#if recette.nature == "Remboursement Excédent" && r == (rt.selRecettes.length)-1}
-                                            <button class="sg-btn" title="Annuler le Remboursement" onclick={()=>vueDiffSaisieEncais=true}><img src="/trash.png" alt=""/></button>
-                                        {/if}
-                                    </td>
                                 </tr>
                             {/each}
                         {/if}
                     </tbody>
                 </table>
+                {#if hoveredRecette}
+                    {@const hovered = hoveredRecette}
+                    <div role="toolbar" tabindex="-1" style="position:fixed;{tooltipStyleR};z-index:100;display:flex;gap:10px;padding:4px 12px;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.12);pointer-events:auto"
+                            onmouseenter={onRecetteTooltipEnter} onmouseleave={onRecetteTooltipLeave}>
+                        <button class="sg-btn ttBtn" data-tooltip="Editer l`Encaissement" onclick={()=>editRecette(hovered)}><img src="/pencil.png" alt=""/></button>
+                        {#if hovered.nature == "Remboursement Excédent" && hoveredRecetteIndex == rt.selRecettes.length - 1}
+                            <button class="sg-btn ttBtn" data-tooltip="Annuler le Remboursement" onclick={()=>vueDiffSaisieEncais=true}><img src="/trash.png" alt=""/></button>
+                        {/if}
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
@@ -669,6 +708,30 @@
         z-index:8;
         box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
     }
+    /* Boutons du Tooltip d'actions ---------- */
+    .ttBtn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        margin: 0;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .ttBtn:hover {
+        background: #e2e8f0;
+    }
+    .ttBtn img {
+        display: block;
+        width: 12px;
+        height: 12px;
+    }
+
     .fermer {
         position: absolute;
         background-color: white;

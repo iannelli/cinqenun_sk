@@ -1,7 +1,7 @@
 <script lang="ts">
     import { superForm, type SuperValidated, type Infer } from 'sveltekit-superforms';
-    import { type AbonnementFormSchema } from '$lib/schemas/abonne';
-    import type { ActionResult } from '@sveltejs/kit';
+    import type { AbonnementFormSchema }                  from '$lib/schemas/abonne';
+    import type { ActionResult }                          from '@sveltejs/kit';
 
     let { data }: {
         data: {
@@ -80,9 +80,7 @@
                 {/if}
             </div>
             <div class="form-footer">
-                <button type="submit" class="btn-submit" disabled={$submitting}>
-                    {$submitting ? 'En cours…' : 'Enregistrer'}
-                </button>
+                <button type="submit" class="btn-submit" disabled={$submitting}>{$submitting ? 'En cours…' : 'Enregistrer'} </button>
             </div>
         </form>
     </div>

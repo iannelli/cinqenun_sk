@@ -1,6 +1,6 @@
 <script>
     import { resolve } from '$app/paths';
-    import { page } from '$app/stores';
+    import { page }    from '$app/state';
     import { beforeNavigate, afterNavigate } from '$app/navigation';
 
     beforeNavigate(() => { document.body.classList.add('wait-cursor'); });
@@ -13,13 +13,13 @@
             <a href={null}><i><img src="/setting.png" alt="" width="20px" height="20px"></i></a>
             <ul class="sub-menu blank"><li><a class="link_name" href={null} style="font-size:14px">Cinqenun - Version 1.0 du 28/08/2023</a></li></ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname === '/dashboard'}>
+        <li class="ian" class:active={page.url.pathname === '/dashboard'}>
             <a href={null}><i><img src="/dashboard.png" alt="" width="20px" height="20px"></i></a>
             <ul class="sub-menu blank">
                 <li><a class="link_name" href={resolve('/dashboard')}>Dashboard</a></li>
             </ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname.startsWith('/abonne')}>
+        <li class="ian" class:active={page.url.pathname.startsWith('/abonne')}>
             <div class="iocn-link"><a href={null}><i><img src="/monCompte.png" alt="" width="20px" height="20px"></i></a></div>
             <ul class="sub-menu">
                 <li><a class="link_name" href={null}>Mon Compte</a></li>
@@ -28,15 +28,15 @@
                 <li><a href={resolve('/abonne/abonnement')}>Abonnement</a></li>
             </ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname === '/affaire'}>
+        <li class="ian" class:active={page.url.pathname === '/affaire'}>
             <a href={null}><i><img src="/affaire.png" alt="" width="20px" height="20px"></i></a>
             <ul class="sub-menu blank"><li><a class="link_name" href={resolve('/affaire')}>Affaires</a></li></ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname === '/client'}>
+        <li class="ian" class:active={page.url.pathname === '/client'}>
             <a href={null}><i><img src="/client.png" alt="" width="20px" height="20px"></i></a>
             <ul class="sub-menu blank"><li><a class="link_name" href={resolve('/client')}>Clients</a></li></ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname.startsWith('/compta')}>
+        <li class="ian" class:active={page.url.pathname.startsWith('/compta')}>
             <div class="iocn-link"><a href={null}><i><img src="/compta.png" alt="" width="20px" height="20px"></i></a></div>
             <ul class="sub-menu">
                 <li><a class="link_name" href={null}>Comptabilité</a></li>
@@ -45,7 +45,7 @@
                 <li><a href={null}>Immobilisation</a></li>
             </ul>
         </li>
-        <li class="ian" class:active={$page.url.pathname.startsWith('/declaration')}>
+        <li class="ian" class:active={page.url.pathname.startsWith('/declaration')}>
             <div class="iocn-link"><a href={null}><i><img src="/decla.png" alt="" width="20px" height="20px"></i></a></div>
             <ul class="sub-menu">
                 <li><a class="link_name" href={null}>Déclaration</a></li>

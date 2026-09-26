@@ -10,12 +10,12 @@
         onclose,
         onok,
     }: {
-        titre    : string;
-        message  : string;
-        visible  : boolean;
-        redirect?: boolean;
-        onclose  : () => void;
-        onok?    : () => void;
+        titre     : string;
+        message   : string;
+        visible   : boolean;
+        redirect? : boolean;
+        onclose   : () => void;
+        onok?     : () => void;
     } = $props();
 
     // ─── Dialog ref ───────────────────────────────────────────────

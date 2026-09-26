@@ -40,7 +40,7 @@ async function traitementCredit(p: DebitCreditParams): Promise<void> {
     const nouveauMouvement: CreditMouvement = {
         nature0:   p.parNature,
         date0:     p.parDate,
-        montant0:  '+' + p.parMontant,
+        montant0:  formatFr(parseFr(String(p.parMontant))),  // '1 730,50' sans préfixe
         facImput0: p.parFacImput,
     };
     // Désérialisation du champ credit
@@ -55,6 +55,7 @@ async function traitementCredit(p: DebitCreditParams): Promise<void> {
         lignes.push({
             refFac0:     p.parRefFac,
             solde0:      '0,00',
+            soldeRemb0:  '0,00',
             affaireId0:  p.parAffaireId,
             mouvements0: [nouveauMouvement],
         });
@@ -86,7 +87,7 @@ async function traitementDebit(p: DebitCreditParams): Promise<void> {
     const nouveauMouvement: DebitMouvement = {
         nature0:  p.parNature,
         date0:    p.parDate,
-        montant0: '+' + p.parMontant,
+        montant0: formatFr(parseFr(String(p.parMontant))),
     };
     // Désérialisation du champ debit
     const lignes = parseDebit(p.client.debit) ?? [];

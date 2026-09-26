@@ -1,10 +1,8 @@
-import type { Handle } from '@sveltejs/kit';
-import { redirect } from '@sveltejs/kit';
-import { prisma } from '$lib/server/prisma';
-import { validateSession } from '$lib/server/auth/session';
-import { validateRememberToken } from '$lib/server/auth/remember';
-import { createSession } from '$lib/server/auth/session';
-import { setSessionCookie } from '$lib/server/auth/cookies';
+import { type Handle, redirect }          from '@sveltejs/kit';
+import { prisma }                         from '$lib/server/prisma';
+import { validateSession, createSession } from '$lib/server/auth/session';
+import { validateRememberToken }          from '$lib/server/auth/remember';
+import { setSessionCookie }               from '$lib/server/auth/cookies';
 
 // ─── Nettoyage des sessions et remember expirés ───────────────────────────────
 let cleanupDone = false;
@@ -44,7 +42,7 @@ export const handle: Handle = async ({ event, resolve }) => {
         const session = await validateSession(Number(sessionId));
         if (session) {
             event.locals.user = {
-                id: session.userId,
+                id:    session.userId,
                 email: session.email
             };
             event.locals.session = session;
@@ -75,6 +73,5 @@ export const handle: Handle = async ({ event, resolve }) => {
             }
         }
     }
-
     return resolve(event);
 };

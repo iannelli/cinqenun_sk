@@ -1,12 +1,13 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { resolve } from '$app/paths';
-    import { superForm } from 'sveltekit-superforms';
-    import { zod4Client } from 'sveltekit-superforms/adapters';
-    import { LoginFormSchema } from '$lib/schemas/login';
-    import { RegisterFormSchema } from '$lib/schemas/register';
+    import { onMount }             from 'svelte';
+    import { fly }                 from 'svelte/transition';
+    import { resolve }             from '$app/paths';
+    import { superForm }           from 'sveltekit-superforms';
+    import { zod4Client }          from 'sveltekit-superforms/adapters';
+    import { LoginFormSchema }     from '$lib/schemas/login';
+    import { RegisterFormSchema }  from '$lib/schemas/register';
     import { ResetPasswordSchema } from '$lib/schemas/reset-password';
-    import { fly } from 'svelte/transition';
+   
 
     let mounted = $state(false);
     onMount(() => {
@@ -33,7 +34,7 @@
         if (!email && !password) return;
         const text = [
             'Vos identifiants Cinqenun :',
-            `E-mail : ${email}`,
+            `E-mail       : ${email}`,
             `Mot de passe : ${password}`,
         ].join('\n');
         await navigator.clipboard.writeText(text);

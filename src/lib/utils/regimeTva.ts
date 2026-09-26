@@ -25,7 +25,7 @@ export function regimeTvaFacture(
 ): string {
     const { statutFiscal0 } = parseStatut(statutRaw);
     // ── Franchise TVA (non assujetti) ─────────────────────────────
-    if (statutFiscal0 === '10') return 'A';
+    if (statutFiscal0 === '1') return 'A';
     // ── Client en France → toujours avec TVA ──────────────────────
     if (cliPays === 'France') return 'B';
     // ── Client UE ─────────────────────────────────────────────────

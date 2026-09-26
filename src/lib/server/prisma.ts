@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import fs from 'fs';
-import { dev } from '$app/environment';
+import fs               from 'fs';
+import { dev }          from '$app/environment';
 
 type PrismaClientWithEvents = PrismaClient<{
     log: [

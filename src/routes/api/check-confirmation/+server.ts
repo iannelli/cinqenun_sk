@@ -1,10 +1,9 @@
-import { json } from '@sveltejs/kit';
-import { consumeConfirmedRegistration } from '$lib/server/auth/email-token';
-import { registerFromPending } from '$lib/server/auth/auth.service';
-import { setSessionCookie } from '$lib/server/auth/cookies';
-import { Prisma } from '@prisma/client';
-import type { RequestHandler } from '@sveltejs/kit';
-import { prisma } from '$lib/server/prisma';
+import { type RequestHandler, json }        from '@sveltejs/kit';
+import { consumeConfirmedRegistration }     from '$lib/server/auth/email-token';
+import { registerFromPending }              from '$lib/server/auth/auth.service';
+import { setSessionCookie }                 from '$lib/server/auth/cookies';
+import { prisma }                           from '$lib/server/prisma';
+import { Prisma }                           from '@prisma/client';
 import { parseAbonnement, buildAbonnement } from '$lib/schemas/abonne';
 import { genererNumAbonne, dateAujourdhui } from '$lib/schemas/commun';
 
@@ -40,15 +39,15 @@ async function initialiserAbonnement(email: string) {
     });
     const compteur = communUpdated.numAbonne ?? 1;
     // 4. Générer le numéro d'abonné et la date d'ouverture
-    const numAbonne0 = genererNumAbonne(compteur);
-    const dateOuvert0 = dateAujourdhui();
+    const numAbonne0    = genererNumAbonne(compteur);
+    const dateOuvert0   = dateAujourdhui();
     // 5. Mettre à jour le champ composite abonnement
     const newAbonnement = buildAbonnement({
         numAbonne0,
         dateOuvert0,
-        dateFerme0: '',
+        dateFerme0:  '',
         etatAbonne0: 'Actif',
-        soldeAbonne0: '0'
+        soldeAbonne0:'0'
     });
     await prisma.abonne.update({
         where: { id: abonne.id },
@@ -57,7 +56,6 @@ async function initialiserAbonnement(email: string) {
             updatedAt: new Date()
         }
     });
-    console.log(`[Register] Abonnement initialisé : ${numAbonne0} (ouvert le ${dateOuvert0}) pour ${email}`);
 }
 
 export const POST: RequestHandler = async ({ request, cookies }) => {

@@ -1,21 +1,21 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import type { ActionResult } from '@sveltejs/kit';
-    import { page } from '$app/state';
+    import { onMount }                          from 'svelte';
+    import type { ActionResult }                from '@sveltejs/kit';
+    import { page }                             from '$app/state';
     import { invalidate, goto, beforeNavigate } from '$app/navigation';
-    import { fade, scale } from 'svelte/transition';
-    import { superForm, type SuperValidated, type Infer } from 'sveltekit-superforms';
-    import { parseNbrMontAffaire, type Abonne } from '$lib/schemas/abonne';
-    import { type Affaire, AffaireFormSchema }  from '$lib/schemas/affaire';
+    import { fade, scale }                      from 'svelte/transition';
+    import { superForm, type SuperValidated, type Infer }       from 'sveltekit-superforms';
+    import { parseNbrMontAffaire, type Abonne }                 from '$lib/schemas/abonne';
+    import { type Affaire, AffaireFormSchema }                  from '$lib/schemas/affaire';
+    import { checkFacturesValideesFetch, prepareUpdateAffaire } from '$lib/components/affaire/AffairePage.utils';
     import ModalConfirm from '$lib/components/ModalConfirm.svelte';
     import ModalAlerte  from '$lib/components/ModalAlerte.svelte';
-    import { checkFacturesValideesFetch, prepareUpdateAffaire } from '$lib/components/affaire/AffairePage.utils';
-   
-    let mounted = $state(false);
 
+    let mounted = $state(false);
     onMount(() => {
         document.body.style.cursor = '';
-        mounted = true; });
+        mounted = true;
+    });
     beforeNavigate(() => { document.body.style.cursor = 'wait'; });
     $effect(() => {
         if ($affaireSubmitting) {
@@ -25,28 +25,54 @@
         }
     });
 
+    // ─── ToolTip Ligne Liste des Affaires ──────────────────────────────────
+    let hoveredAffaire = $state<Affaire | null>(null);
+    let tooltipStyle   = $state('');
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    function onRowEnter(e: MouseEvent, affaire: Affaire) {
+        clearTimeout(hideTimer);
+        const rect     = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyle   = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+        hoveredAffaire = affaire; // ← mise à jour immédiate
+    }
+    function onRowMove(e: MouseEvent) {
+        if (!hoveredAffaire) return;
+        clearTimeout(hideTimer);
+        const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        tooltipStyle = `top:${rect.top + rect.height / 2}px;left:${e.clientX}px;transform:translate(-50%,-50%)`;
+    }
+    function onRowLeave() {
+        hideTimer = setTimeout(() => {
+            hoveredAffaire = null;
+        }, 500);
+    }
+    function onTooltipLeave() {
+        hideTimer = setTimeout(() => {
+            hoveredAffaire = null;
+        }, 500);
+    }
+    function onTooltipEnter() {
+        clearTimeout(hideTimer);
+    }
     // ─── Modale ALERTE ──────────────────────────────────────────
     let alerteVisible = $state(false);
     let alerteTitre   = $state('');
     let alerteMessage = $state('');
-
     // ─── Props ───────────────────────────────────────────────────
     let { data }: {
         data: {
-            abonne:            Abonne;
-            affaires:          Affaire[];
-            createForm:        SuperValidated<Infer<typeof AffaireFormSchema>>;
-            clients:           { id: number; libClient: string }[];
+            abonne:     Abonne;
+            affaires:   Affaire[];
+            createForm: SuperValidated<Infer<typeof AffaireFormSchema>>;
+            clients:    { id:number; libClient:string }[];
         };
     } = $props();
     // svelte-ignore state_referenced_locally
     const initialForm = data.createForm;
 
-    // ─── Détecter le retour depuis client ────────────────────────────
+    // ─── Détection du retour depuis Client ────────────────────────────
     const fromClient  = $derived(page.url.searchParams.get('from') === 'client');
-    const newClientId = $derived(
-        parseInt(page.url.searchParams.get('newClientId') ?? '0', 10) || 0
-    );
+    const newClientId = $derived(parseInt(page.url.searchParams.get('newClientId') ?? '0', 10) || 0);
     // Rouvrir la modale et sélectionner le nouveau client au retour
     $effect(() => {
         if (fromClient) {
@@ -72,33 +98,32 @@
                 }
                 resetAffaire();
                 affaireToEdit = null;
-                invalidate('app:abonne');   // ← ajout : nbrMontAffaire a changé (création uniquement)
+                invalidate('app:abonne'); // nbrMontAffaire a changé (création uniquement)
             }
         }
     });
 
     // ─── Gestion des Onglets "Affaire" ────────────────────────────────
     // Onglet actif : 1=En Cours | 2=En Attente | 3=Inactive | 4=Soldée
-    // svelte-ignore state_referenced_locally
     let ongletCourant0 = $state(
-        data.affaires.some(a => a.situation === '20x' || a.situation === '30x') ? 1 :
-        data.affaires.some(a => a.situation === '00x' || a.situation === '10x' || a.situation === null) ? 2 :
-        data.affaires.some(a => a.situation === '11a' || a.situation === '11b') ? 3 :
-        data.affaires.some(a => a.situation === '31a' || a.situation === '31b') ? 4 : 1
+        data.affaires.some(a => a.situation === '20x' || a.situation === '30x') ? 1 : // Onglet Affaire en Cours
+        data.affaires.some(a => a.situation === '00x' || a.situation === '10x' || a.situation === null) ? 2 : // Onglet Affaire en Attente
+        data.affaires.some(a => a.situation === '11a' || a.situation === '11b') ? 3 : // Onglet Affaire Inactive
+        data.affaires.some(a => a.situation === '31a' || a.situation === '31b') ? 4 : 1 // Onglet Affaire Soldée
     );
     // Compteurs issus de abonne.nbrMontAffaire (mis à jour par traitement côté serveur)
     const nbrMontAffaireArray = $derived(parseNbrMontAffaire(data.abonne.nbrMontAffaire));
-    const ongletEnCourNb0     = $derived(nbrMontAffaireArray[2] + nbrMontAffaireArray[4]);   // '20x' + '30x'
-    const ongletAttenteNb0    = $derived(nbrMontAffaireArray[0] + nbrMontAffaireArray[1]);   // '00x' + '10x'
-    const ongletInactNb0      = $derived(nbrMontAffaireArray[6] + nbrMontAffaireArray[8]);   // '11a' + '11b'
-    const ongletSoldeNb0      = $derived(nbrMontAffaireArray[10] + nbrMontAffaireArray[12]); // '31a' + '31b'
+    const ongletEnCourNb0     = $derived(nbrMontAffaireArray[2] + nbrMontAffaireArray[4]);   // '20x' + '30x' : Onglet Affaire en Cours
+    const ongletAttenteNb0    = $derived(nbrMontAffaireArray[0] + nbrMontAffaireArray[1]);   // '00x' + '10x' : Onglet Affaire en Attente
+    const ongletInactNb0      = $derived(nbrMontAffaireArray[6] + nbrMontAffaireArray[8]);   // '11a' + '11b' : Onglet Affaire Inactive
+    const ongletSoldeNb0      = $derived(nbrMontAffaireArray[10] + nbrMontAffaireArray[12]); // '31a' + '31b' : Onglet Affaire Soldée
     // Liste filtrée selon l'onglet actif
-    const affairesFiltrees = $derived.by((): Affaire[] => {
+    const affairesFiltrees    = $derived.by((): Affaire[] => {
         switch (ongletCourant0) {
-            case 1: return data.affaires.filter(a => a.situation === '20x' || a.situation === '30x');
-            case 2: return data.affaires.filter(a => a.situation === '00x' || a.situation === '10x' || a.situation === null);
-            case 3: return data.affaires.filter(a => a.situation === '11a' || a.situation === '11b');
-            case 4: return data.affaires.filter(a => a.situation === '31a' || a.situation === '31b');
+            case 1: return data.affaires.filter(a => a.situation === '20x' || a.situation === '30x'); // Onglet Affaire en Cours
+            case 2: return data.affaires.filter(a => a.situation === '00x' || a.situation === '10x' || a.situation === null); // Onglet Affaire en Attente
+            case 3: return data.affaires.filter(a => a.situation === '11a' || a.situation === '11b'); // Onglet Affaire Inactive
+            case 4: return data.affaires.filter(a => a.situation === '31a' || a.situation === '31b'); // Onglet Affaire Soldée
             default: return data.affaires;
         }
     });
@@ -107,10 +132,10 @@
     }
 
     // ─── État ────────────────────────────────────────────────────
-    let affaireDialog = $state<HTMLDialogElement | null>(null);
+    let affaireDialog        = $state<HTMLDialogElement | null>(null);
     let confirmDeleteVisible = $state(false);
     let affaireToDelete      = $state<Affaire | null>(null);
-    let affaireToEdit = $state<Affaire | null>(null);
+    let affaireToEdit        = $state<Affaire | null>(null);
 
     // ─── Gestion modales ─────────────────────────────────────────
     function openCreateModal() {
@@ -133,14 +158,14 @@
     async function openDeleteModal(affaire: Affaire) {
         await checkFacturesValideesFetch(affaire.id, {
             onBloquee: (titre, message) => {
-                alerteTitre  = titre;
-                alerteMessage = message;
-                alerteVisible = true;
+                alerteTitre          = titre;
+                alerteMessage        = message;
+                alerteVisible        = true;
                 confirmDeleteVisible = false;
             },
             onSupprimable: (a) => {
                 affaireToDelete      = a;
-                confirmDeleteVisible  = true;
+                confirmDeleteVisible = true;
                 alerteVisible        = false;
             }
         }, affaire);
@@ -216,10 +241,11 @@
                 </thead>
                 <tbody>
                     {#if affairesFiltrees.length === 0}
-                        <tr class="sg-trSha"><td colspan="9" class="empty-state">Aucune affaire trouvée.</td></tr>
+                        <tr class="sg-trSha"><td colspan="8" class="empty-state">Aucune affaire trouvée.</td></tr>
                     {:else}
                         {#each affairesFiltrees as affaire (affaire.id)}
-                            <tr class="sg-trSha" style="cursor:pointer" onclick={()=>window.location.href=`/affaire/${affaire.id}`}>
+                            <tr class="sg-trSha {hoveredAffaire?.id === affaire.id ? 'sg-trSha--hovered' : ''}" style="cursor:pointer" onmouseenter={(e)=>{clearTimeout(hideTimer);onRowEnter(e, affaire)}}
+                                onmousemove={onRowMove} onmouseleave={onRowLeave} onclick={()=>window.location.href=`/affaire/${affaire.id}`}>
                                 <td>{affaire.libAffaire}</td>
                                 <td>{formatDate(affaire.createdAt)}</td>
                                 <td>{affaire.libClient}</td>
@@ -228,19 +254,21 @@
                                 <td class="col-montant">{affaire.montFac}</td>
                                 <td class="col-montant">{affaire.montRegl}</td>
                                 <td class="col-montant">{affaire.montSolde}</td>
-                                <td class="sg-tdOverlay">
-                                    <div class="sg-rowActions sg-rowActions--affaires">
-                                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                                        <button class="sg-btn" data-tooltip="Afficher la liste des Factures de cette Affaire" onclick={(e) => { e.stopPropagation(); goto(`/affaire/${affaire.id}`) }}><img style="height:18px" src="/list.png" alt=""/></button>
-                                        <button class="sg-btn" data-tooltip="Consulter ou Mettre à jour cette Affaire" onclick={(e) => { e.stopPropagation(); openUpdateModal(affaire) }}><img style="height:18px" src="/pencil.png" alt=""/></button>
-                                        <button class="sg-btn" data-tooltip="Supprimer ou Annuler cette Affaire" onclick={(e) => { e.stopPropagation(); openDeleteModal(affaire) }}><img style="height:18px" src="/trash.png" alt=""/></button>
-                                    </div>
-                                </td>
                             </tr>
-                       {/each}
+                        {/each}
                     {/if}
                 </tbody>
             </table>
+            {#if hoveredAffaire}
+                {@const hovered = hoveredAffaire}
+                <div role="toolbar" tabindex="-1" style="position:fixed;{tooltipStyle};z-index:100;display:flex;gap:13px;padding:4px 12px;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.12);pointer-events:auto"
+                    onmouseenter={onTooltipEnter} onmouseleave={onTooltipLeave}>
+                    <button class="sg-btn ttBtn" data-tooltip="Supprimer cette Affaire" onclick={(e) => { e.stopPropagation(); openDeleteModal(hovered) }}><img src="/trash.png" alt=""/></button>
+                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+                    <button class="sg-btn ttBtn" data-tooltip="Afficher la liste des Factures de cette Affaire" onclick={(e) => { e.stopPropagation(); goto(`/affaire/${hovered.id}`) }}><img src="/list.png" alt=""/></button>
+                    <button class="sg-btn ttBtn" data-tooltip="Consulter ou Mettre à jour cette Affaire" onclick={(e) => { e.stopPropagation(); openUpdateModal(hovered) }}><img src="/pencil.png" alt=""/></button>
+                </div>
+            {/if}
         </div>
     </div>
 {/if}
@@ -306,12 +334,9 @@
 
 <!-- ===== MODALE CONFIRME ===== -->
 <ModalConfirm
-    bind:visible={confirmDeleteVisible}
-    titre="Suppression de l'Affaire"
-    message="Êtes-vous sûr de vouloir supprimer l'affaire <strong>« {affaireToDelete?.libAffaire ?? ''} »</strong> ?<br>Cette action est irréversible."
-    labelConfirm="Supprimer"
-    onconfirm={() => deleteAffaire()}
-    onannuler={() => affaireToDelete = null} />
+    bind:visible={confirmDeleteVisible} titre="Suppression de l'Affaire" message="Êtes-vous sûr de vouloir supprimer l'affaire <strong>« {affaireToDelete?.libAffaire ?? ''} »</strong> ?<br>Cette action est irréversible."
+    labelConfirm="Supprimer" onconfirm={()=>deleteAffaire()} onannuler={()=>affaireToDelete=null}
+/>
 
 <style>
     [title] {
@@ -399,6 +424,26 @@
         font-size: 0.78rem;
         color: #dc2626;
     }
+    /* Boutons du Tooltip d'actions ---------- */
+    .ttBtn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        margin: 0;
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .ttBtn img {
+        display: block;
+        width: 17px;
+        height: 17px;
+    }
+
     /* ── Onglets Slidemenu ── */
     .slidemenu {
         width: 60%;
