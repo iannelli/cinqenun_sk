@@ -200,6 +200,7 @@ function createJsonFacTotal(facture: Facture, regimeTva: string): TotalPdf[] {
     const raw = String(facture.total ?? '');
     if (!raw) return [];
     const imputCreCli = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
+    const acompMont   = parseFloat(String(facture.acompMont   ?? '0').replace(',', '.')) || 0;
     const lignes = raw.split('|').filter(Boolean).map(row => {
         const arr   = row.split('¤');
         const tauxTva = regimeTva === 'B' ? extrairePourcentage(arr[1] ?? '') : '0.00';
@@ -214,26 +215,27 @@ function createJsonFacTotal(facture: Facture, regimeTva: string): TotalPdf[] {
         };
     });
     // ── Pas d'imputation : forcer acompImput vide ─────────────────
-    if (imputCreCli === 0) {
+    if (imputCreCli === 0 && acompMont === 0) {
         for (const l of lignes) { l.acompImput = ''; }
         return lignes;
     }
-    // ── Recalcul si imputCreCli > 0 mais acompImput vide ─────────
-    if (regimeTva === 'B') {
-        const montantTotalHT = lignes.reduce((sum, l) => sum + (parseFloat(l.brut.replace(',', '.')) || 0), 0);
+    // ── Recalcul uniquement pour les anciennes factures sans imputation enregistrée ──
+    // Seules les lignes soumises à TVA supportent l'imputation (les Débours n'ont pas de taux)
+    const imputationEnregistree = lignes.some(l => l.acompImput !== '');
+    if (regimeTva === 'B' && !imputationEnregistree) {
+        const lignesTva        = lignes.filter(l => l.tauxTva !== '');
+        const montantTotalHT   = lignesTva.reduce((sum, l) => sum + (parseFloat(l.brut.replace(',', '.')) || 0), 0);
         if (montantTotalHT > 0) {
-            for (const l of lignes) {
-                if (!l.acompImput) {
-                    const montBrut = parseFloat(l.brut.replace(',', '.')) || 0;
-                    const tauxTva  = parseFloat(l.tauxTva.replace(',', '.')) || 0;
-                    const acompte  = (imputCreCli * (montBrut / montantTotalHT)) / (1 + tauxTva / 100);
-                    const montHt   = montBrut - acompte;
-                    const montTva  = (montHt * tauxTva) / 100;
-                    l.acompImput   = fmt2fr(acompte);
-                    l.montHt       = fmt2fr(montHt);
-                    l.montTva      = fmt2fr(montTva);
-                    l.montTtc      = fmt2fr(montHt + montTva);
-                }
+            for (const l of lignesTva) {
+                const montBrut = parseFloat(l.brut.replace(',', '.')) || 0;
+                const tauxTva  = parseFloat(l.tauxTva.replace(',', '.')) || 0;
+                const acompte  = (imputCreCli * (montBrut / montantTotalHT)) / (1 + tauxTva / 100);
+                const montHt   = montBrut - acompte;
+                const montTva  = (montHt * tauxTva) / 100;
+                l.acompImput   = fmt2fr(acompte);
+                l.montHt       = fmt2fr(montHt);
+                l.montTva      = fmt2fr(montTva);
+                l.montTtc      = fmt2fr(montHt + montTva);
             }
         }
     }
@@ -297,15 +299,16 @@ export function buildDocDefinition(ctx: PdfContext): unknown {
     const clientArr   = parseClientArray(String(facture.client ?? ''));
     const acompTaux   = String(facture.acompTaux ?? '');
     const nbreLigRem  = totState.nbreLigRem0 ?? 0;
-    const imputAcomp  = String(totState.imputAcomp0 ?? '0');
     const imputCreCli = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
+    const acompMont                     = parseFloat(String(facture.acompMont ?? '0').replace(',', '.')) || 0;
+    const estDevisOuAcompte             = codeType === '10' || (codeType === '30' && acompMont > 0);
     const abo         = abonne as Record<string, unknown>;
     const temoinLogo  = Number(abo.temoinLogo ?? 0);
     const logoArr     = parseLogoText(String(abo.logoText ?? ''));
     // ── Configuration colonnes totalisation ───────────────────────
     let confColTot = 0;
     if (regimeTva === 'B') confColTot += 1;
-    if ((codeType === '10' && Number(acompTaux) > 0 && regimeTva === 'B') || imputAcomp === '3' || (regimeTva === 'B' && imputCreCli > 0)) confColTot += 10;
+    if ((estDevisOuAcompte || imputCreCli > 0) && regimeTva === 'B') confColTot += 10;
     // ── Données JSON ──────────────────────────────────────────────
     const jsonLignes = (codeType === '10' || codeType === '30') ? createJsonLigne(facture) : [];
     const jsonTotaux = createJsonFacTotal(facture, regimeTva);
@@ -349,8 +352,8 @@ export function buildDocDefinition(ctx: PdfContext): unknown {
             header = [
                 {text:'Totalisation', style:'tableHeader2'},
                 ...(regimeTva === 'B' ? [{text:'Brut HT', style:'tableHeader2'}] : []),
-                ...((codeType === '10' && Number(acompTaux) > 0 && regimeTva === 'B') || imputAcomp === '3' || (regimeTva === 'B' && imputCreCli > 0) ? [
-                    {text: imputCreCli > 0 ? 'Imputation HT' : 'Acompte HT', style:'tableHeader2'},
+                ...((estDevisOuAcompte || imputCreCli > 0) && regimeTva === 'B' ? [
+                    {text: estDevisOuAcompte ? 'Acompte HT' : 'Imputation HT', style:'tableHeader2'},
                     {text:'Net HT', style:'tableHeader2'},
                 ] : []),
                 ...(regimeTva === 'B' ? [{text:'% Tva', style:'tableHeader2'}] : []),
@@ -396,11 +399,11 @@ export function buildDocDefinition(ctx: PdfContext): unknown {
                     ...(confColTot === 1 || confColTot === 11 ? [{
                         stack: [
                             {text: t.montTva, style:'tableBody2'},
-                            ...(imputCreCli > 0 && t.acompImput && parseFloat(t.acompImput.replace(',', '.')) > 0 ? [{
-                                text:    `Tva/Imput: ${(parseFloat(t.acompImput.replace(',', '.')) * parseFloat(t.tauxTva.replace(',', '.')) / 100).toFixed(2).replace('.', ',')}`,
+                            ...((estDevisOuAcompte || imputCreCli > 0) && t.acompImput && parseFloat(t.acompImput.replace(',', '.')) > 0 ? [{
+                                text:   `${estDevisOuAcompte ? 'Tva/Acompte' : 'Tva/Imput'}: ${(parseFloat(t.acompImput.replace(',', '.')) * parseFloat(t.tauxTva.replace(',', '.')) / 100).toFixed(2).replace('.', ',')}`,
                                 fontSize:  6,
                                 italics:  true,
-                                color:   '#666666',
+                                color:  '#666666',
                                 alignment: 'center' as const,
                             }] : []),
                         ],

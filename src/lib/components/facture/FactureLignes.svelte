@@ -20,6 +20,7 @@
         dateEcheanceDate0 = '',
         onrefresh, // eslint-disable-line @typescript-eslint/no-unused-vars
         onModification,
+        onTotauxUpdated,
     }: { 
         facture           : Facture | null;
         totaux            : FactureTotauxState;
@@ -27,6 +28,7 @@
         dateEcheanceDate0 : string;
         onrefresh         : () => void;
         onModification?   : () => void;
+        onTotauxUpdated?  : () => void;
     } = $props();
   
     let tarifDialog = $state<HTMLDialogElement | null>(null);
@@ -36,7 +38,7 @@
   
     // ─── ToolTip Ligne de Facturation ────────────────────────────
     let hoveredLigneIndex = $state(-1);
-    let tooltipStyle    = $state('');
+    let tooltipStyle      = $state('');
     let hideTimer: ReturnType<typeof setTimeout> | undefined;
     function onRowEnter(e: MouseEvent, i: number) {
         clearTimeout(hideTimer);
@@ -109,6 +111,8 @@
     let libLegendeLigne     = $state('');
     let libHtmlLigne        = $state('');
     let tarifSelectValue    = $state('');   // eslint-disable-line @typescript-eslint/no-unused-vars
+    let sansReference = $state(false);
+    const SANS_REF    = '__sans_reference__';
     let activeBtnEditRef    = $state(false); // eslint-disable-line @typescript-eslint/no-unused-vars
     let uniteVu             = $state(false);
     let divEditRefVu        = $state(false); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -135,11 +139,11 @@
         setLibFraisDebourDc: (v) => libFraisDebourDc = v,
     };
     const vs: VerifSaisieState = {
-        get uniteVu()   { return uniteVu; },
+        get uniteVu()     { return uniteVu; },
         get puQteBaseVu() { return puQteBaseVu; },
-        get remMontVu()  { return remMontVu; },
-        get tvaVu()    { return tvaVu && facture?.regimeTva === 'B'; },
-        showAlert:     (titre, msg) => {alerteTitre=titre; alerteMessage=msg; alerteVisible=true},
+        get remMontVu()   { return remMontVu; },
+        get tvaVu()       { return tvaVu && facture?.regimeTva === 'B'; },
+        showAlert:        (titre, msg) => {alerteTitre=titre; alerteMessage=msg; alerteVisible=true},
         setLibHtmlLigne:  (v) => libHtmlLigne = v,
     };
     // ─── Toast ────────────────────────────────────────────────────
@@ -313,18 +317,55 @@
                 remMontVu=false; fraisDebourDcVu=true; tvaVu=false;
         };
     }
+    // Option « Sans référence » : détache la ligne de tout tarif (réversible en choisissant un tarif)
+    function choisirSansReference(): void {
+        const tarifApplique = ligne.tarifId0 !== '';
+        sansReference    = true;
+        tarifSelectValue = '';
+        if (tarif) tarif.id = 0;
+        ligne.tarifId0   = '';
+        // En création, on efface ce que le tarif avait rempli ; en modification, on conserve la saisie
+        if (!tarifApplique || ligneEditIndex !== -1) return;
+        ligne.nature0       = '';
+        ligne.unite0        = '';
+        ligne.prixUnitaire0 = '0,00';
+        ligne.quantite0     = '0,00';
+        ligne.baseHt0       = '0,00';
+        ligne.pourRemise0   = '0';
+        ligne.remise0       = '0,00';
+        ligne.montantHt0    = '0,00';
+        ligne.tauxTva0      = '';
+        uniteVu             = false;
+        puQteBaseVu         = false;
+        forfaitVu           = false;
+        remMontVu           = false;
+        fraisDebourDcVu     = false;
+        tvaVu               = false;
+        libHtmlLigne        = '';
+        chargerEditeur('');
+    }
+    function changerTarif(e: Event): void {
+        const val = (e.target as HTMLSelectElement).value;
+        if (val === SANS_REF) {
+            choisirSansReference();
+            return;
+        }
+        sansReference    = false;
+        tarifSelectValue = val;
+        selectTarif(e);
+    }
+
     // ─── Éditeur de texte riche (Tiptap) ─────────────────────────
     // Formats volontairement limités (gras, italique, souligné, couleur, retours à la ligne) pour rester transposables dans la version PDF de la facture.
     let editorElement = $state<HTMLDivElement | null>(null);
     let editor: Editor | null = null;
     let editorEtat = $state(0); // incrémenté à chaque transaction pour rafraîchir l'état des boutons
-  
     // Convertit l'ancien HTML produit par execCommand (<font color>) en HTML compris par Tiptap
     function normaliserHtml(html: string): string {
         if (!html) return '';
         if (!/<font\b/i.test(html)) return html;
         const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-        doc.querySelectorAll('font').forEach((font) => {
+        doc.querySelectorAll<HTMLElement>('font').forEach((font) => {
             const span = doc.createElement('span');
             const couleur = font.getAttribute('color');
             if (couleur) span.style.color = couleur;
@@ -332,6 +373,32 @@
             font.replaceWith(span);
         });
         return doc.body.firstElementChild?.innerHTML ?? html;
+    }
+    /* Retire les lignes vides superflues en début et en fin de libellé :
+       paragraphes vides (Entrée superflue) et restes de l'ancien éditeur execCommand, quelle que soit leur forme (<div><br></div>, <div><b><br></b></div>, &nbsp;…) */
+    function nettoyerHtml(html: string): string {
+        const h = (html ?? '').trim();
+        if (!h) return '';
+        if (typeof DOMParser === 'undefined') return h;   // rendu serveur : pas de nettoyage
+        const doc    = new DOMParser().parseFromString(`<div>${h}</div>`, 'text/html');
+        const racine = doc.body.firstElementChild;
+        if (!racine) return h;
+        // Un nœud est vide s'il ne contient aucun texte visible
+        const estVide = (n: Node): boolean => {
+            if (n.nodeType === Node.TEXT_NODE) return (n.textContent ?? '').replace(/\u00a0/g, ' ').trim() === '';
+            if (n.nodeType !== Node.ELEMENT_NODE) return true;
+            if ((n as Element).tagName === 'IMG') return false;
+            return Array.from(n.childNodes).every(estVide);
+        };
+        // Supprime les nœuds vides en tête et en fin, puis recommence à l'intérieur du premier et du dernier bloc
+        const rogner = (el: Element): void => {
+            while (el.firstChild && estVide(el.firstChild)) el.firstChild.remove();
+            while (el.lastChild  && estVide(el.lastChild))  el.lastChild.remove();
+            if (el.firstChild?.nodeType === Node.ELEMENT_NODE) rogner(el.firstChild as Element);
+            if (el.lastChild?.nodeType  === Node.ELEMENT_NODE && el.lastChild !== el.firstChild) rogner(el.lastChild as Element);
+        };
+        rogner(racine);
+        return racine.innerHTML;
     }
 
     // Création / destruction de l'éditeur en même temps que la zone de saisie
@@ -359,9 +426,9 @@
                 FontSize,
                 Placeholder.configure({ placeholder: 'Saisissez le Libellé de la ligne ici...' }),
             ],
-            content: normaliserHtml(untrack(() => libHtmlLigne)),
+            content: normaliserHtml(nettoyerHtml(untrack(() => libHtmlLigne))),
             onUpdate: ({ editor }) => {
-                libHtmlLigne = editor.isEmpty ? '' : editor.getHTML();
+                libHtmlLigne = editor.isEmpty ? '' : nettoyerHtml(editor.getHTML());
             },
             onTransaction: () => {
                 editorEtat++;
@@ -376,7 +443,7 @@
   
     // Charge un contenu dans l'éditeur sans le considérer comme une saisie
     function chargerEditeur(html: string): void {
-        editor?.commands.setContent(normaliserHtml(html), { emitUpdate: false });
+        editor?.commands.setContent(normaliserHtml(nettoyerHtml(html)), { emitUpdate: false });
     }
     function estActif(nom: string): boolean {
         void editorEtat;
@@ -411,7 +478,8 @@
     }
 
     function initLigne():void {
-        tarifSelectValue = '';
+        tarifSelectValue  = '';
+        sansReference     = false;
         if (dateEcheanceDate0 === '') {
             alerteTitre   = 'Saisies obligatoires';
             alerteMessage = "Les Données Générales doivent être préalablement<br>saisies avant celles des lignes de Facturation.";
@@ -443,6 +511,26 @@
         libHtmlLigne        = '';
         chargerEditeur('');
         divSaisieVu         = true;
+    }
+    // Changement de nature : on repart d'une saisie vierge (seuls la nature, le libellé et le tarif sont conservés)
+    function changerNature(e: Event): void {
+        // Valeurs
+        ligne.unite0        = '';
+        ligne.prixUnitaire0 = '0,00';
+        ligne.quantite0     = '0,00';
+        ligne.baseHt0       = '0,00';
+        ligne.pourRemise0   = '0';
+        ligne.remise0       = '0,00';
+        ligne.montantHt0    = '0,00';
+        ligne.tauxTva0      = '';
+        // Affichage : tout est masqué, selectNature n'affiche ensuite que les champs de la nouvelle nature
+        uniteVu         = false;
+        puQteBaseVu     = false;
+        forfaitVu       = false;
+        remMontVu       = false;
+        fraisDebourDcVu = false;
+        tvaVu           = false;
+        selectNature(e, ligne, st);
     }
     async function handleValiderLigne() {
         if (!verifSaisie(ligne, vs)) return;
@@ -493,12 +581,14 @@
                     traitLibTotaux(facture, totaux);
                     traitColSpan(facture, totaux);
                 }
+                onTotauxUpdated?.(); // ← ajouter ici
         }
-        await lancerGestionTarif(tarifs, ligne, tst);
+        await lancerGestionTarif(tarifs, ligne, tst)
     }
     async function editLigne(i: number) {
         const l = lignesArray[i];
         if (!l) return;
+        sansReference       = l.tarifId0 === '';
         ligneEditIndex      = i;
         ligne.typeLig0      = l.typeLig0;
         ligne.nature0       = l.nature0;
@@ -577,19 +667,19 @@
                 {#each lignesArray as ligne, i (i)}
                     <tr class="trSha {hoveredLigneIndex === i ? 'sg-trSha--hovered' : ''}" style="cursor:pointer" onmouseenter={(e)=>{clearTimeout(hideTimer);onRowEnter(e, i)}} onmousemove={onRowMove} onmouseleave={onRowLeave}>
                         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                        <td style="height:10px;text-align:left">{@html ligne.textHtml0}</td>
-                        <td style="height:10px">{ligne.unite0}</td>
-                        <td style="height:10px">{ligne.prixUnitaire0}</td>
-                        <td style="height:10px">{ligne.quantite0}</td>
+                        <td style="height:30px;text-align:left">{@html ligne.textHtml0}</td>
+                        <td style="height:30px">{ligne.unite0}</td>
+                        <td style="height:30px">{ligne.prixUnitaire0}</td>
+                        <td style="height:30px">{ligne.quantite0}</td>
                         {#if nbreLigRem0 > 0}
                             {#if Number(ligne.pourRemise0) > 0}
-                                <td style="height:10px">{ligne.baseHt0}</td>
+                                <td style="height:30px">{ligne.baseHt0}</td>
                                 <td>{ligne.pourRemise0} %<br>{ligne.remise0}</td>
                             {:else}
                                 <td>—</td><td>—</td>
                             {/if}
                         {/if}
-                        <td style="height:10px">{ligne.montantHt0}</td>
+                        <td style="height:30px">{ligne.montantHt0}</td>
                         {#if facture.regimeTva == 'B'}
                             <td>{ligne.tauxTva0}</td>
                         {/if}
@@ -638,9 +728,10 @@
                     <!-- Tarif -->
                     {#if tarifs.length > 0}
                         <div style="display:flex;align-items:center;gap:4px">
-                            <select id="selectTarif" class="sg-select" value={tarifs.find((t: Tarif) => String(t.id) === String(ligne.tarifId0))?.motCle ?? ''}
-                                    onchange={(e)=>{tarifSelectValue=(e.target as HTMLSelectElement).value;selectTarif(e)}} style="width:160px;height:30px">
+                            <select id="selectTarif" class="sg-select" value={sansReference ? SANS_REF : (tarifs.find((t: Tarif) => String(t.id) === String(ligne.tarifId0))?.motCle ?? '')}
+                                    onchange={(e)=>changerTarif(e)} style="width:160px;height:30px">
                                 <option value="" disabled hidden>Référence Tarif</option>
+                                <option value={SANS_REF} style="font-style:italic;color:#64748b">— Sans référence —</option>
                                 {#each tarifs as t (t.id)}
                                     <option value={t.motCle}>{t.motCle}</option>
                                 {/each}
@@ -653,7 +744,7 @@
                     <!-- Nature -->
                     <div style="display:flex;align-items:center;gap:6px">
                         <label for="" class="sg-asterix" style="color:red;margin-bottom:6px">*</label>
-                        <select id="selectNat" class="sg-select" bind:value={ligne.nature0} onchange={(e)=>selectNature(e, ligne, st)} style="width:130px;height:30px">
+                        <select id="selectNat" class="sg-select" bind:value={ligne.nature0} onchange={(e)=>changerNature(e)} style="width:130px;height:30px">
                             <option value="" disabled hidden>Nature ...</option>
                             {#each NATURES as nature (nature)}
                                 <option value={nature}>{nature}</option>

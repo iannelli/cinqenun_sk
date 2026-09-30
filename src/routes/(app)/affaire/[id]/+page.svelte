@@ -234,6 +234,14 @@
     }
     function closeDeleteAffaire() { deleteAffaireDialog?.close(); }
 
+    // ─── Liste des Factures ──────────────────────────────────────
+    const hasImputCreCliFactures = $derived(
+        data.factures.some(f => (f.imputCreCli ?? 0) !== 0)
+    );
+    const hasExcedentFactures = $derived(
+        data.factures.some(f => parseFloat(String(f.montCli ?? '0').replace(',', '.')) > 0)
+    );
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Fonctions d'Affichage des "Boutons-Icon" d'Action sur les lignes des Devis et Facture
     // ─────────────────────────────────────────────────────────────────────────────
@@ -564,7 +572,14 @@
                         <th>Date d'émission</th>
                         <th style="text-align:center">Délai</th>
                         <th class="col-montant">Total TTC</th>
+                        {#if hasImputCreCliFactures}
+                            <th class="col-montant">Crédit Client</th>
+                            <th class="col-montant">Montant Dû</th>
+                        {/if}
                         <th class="col-montant">Réglé</th>
+                        {#if hasExcedentFactures}
+                            <th class="col-montant">Excédent</th>
+                        {/if}
                         <th class="col-montant">Solde</th>
                         <th class="sg-thOverlay"></th>
                     </tr>
@@ -572,7 +587,7 @@
                 <tbody>
                     {#if data.factures.length === 0}
                         <tr class="sg-trSha">
-                            <td colspan="10" class="empty-state">Aucune facture pour cette affaire.</td>
+                            <td colspan={hasImputCreCliFactures ? 11 : 9} class="empty-state">Aucune facture pour cette affaire.</td>
                         </tr>
                     {:else}
                         {#each data.factures as facture (facture.id)}
@@ -585,8 +600,19 @@
                                 <td>{formatDate(facture.dateEmis)}</td>
                                 <td style="text-align:center">{libFacTypeDelai(facture.typeDelai, facture.delai)}</td>
                                 <td class="col-montant">{formatMontant(facture.totTtc)}</td>
+                                {#if hasImputCreCliFactures}
+                                    <td class="col-montant">
+                                        {(facture.imputCreCli ?? 0) !== 0 ? '- ' + formatMontant(facture.imputCreCli) : ''}
+                                    </td>
+                                    <td class="col-montant">
+                                        {(facture.imputCreCli ?? 0) !== 0 ? formatMontant((facture.totTtc ?? 0) - (facture.imputCreCli ?? 0)) : ''}
+                                    </td>
+                                {/if}
                                 <td class="col-montant col-regle">{formatMontant(facture.totRegl)}</td>
-                                <td class="col-montant col-solde">{formatMontant(facture.solde)} </td>
+                                {#if hasExcedentFactures}
+                                    <td class="col-montant">{parseFloat(String(facture.montCli ?? '0').replace(',', '.')) > 0 ? formatMontant(facture.montCli) : ''}</td>
+                                {/if}
+                                <td class="col-montant col-solde">{formatMontant(facture.solde)}</td>
                             </tr>
                         {/each}
                     {/if}

@@ -162,7 +162,7 @@ export function traitLigneTotal(facture:Facture, tot:FactureTotauxState): void {
 
     // ── FACTURE : Imputation de l'Acompte ────────────────────────────────────
     if (codeType === '30') {
-        if (imputAcomp === '2') { // Franchise TVA : imputation sur les totaux finaux ---------
+        if (imputAcomp === '2' && facture.refDevis) { // Franchise TVA : imputation sur les totaux finaux ---------
             const totBrut   = fmt2fr(cumulMontTtc);
             const acompMt   = n(facture.acompMont);
             const totNet    = cumulMontTtc - acompMt;
@@ -178,7 +178,7 @@ export function traitLigneTotal(facture:Facture, tot:FactureTotauxState): void {
                 (facture as Record<string, unknown>).totPrestaHt = fmt2fr(cal);
             }
         }
-        if (imputAcomp === '3') { // Imposition TVA : imputation sur les lignes de totalisation --------
+        if (imputAcomp === '3' && facture.refDevis) { // Imposition TVA : imputation sur les lignes de totalisation --------
             const arrAcomp = String(facture.acompMont ?? '').split(ROW_SEP);
             let ligTotAcompte = '';
             for (const itemAcomp of arrAcomp) {
@@ -286,6 +286,12 @@ export function traitColSpan(facture: Facture, tot: FactureTotauxState): void {
         if (facture.codeType === 10 && Number(facture.acompTaux) > 0)   tot.colSpanTot0 += 1;
         if (facture.codeType === 30) {
             if (tot.imputAcomp0 === '3') tot.colSpanTot0 += 2;
+            else if (
+                parseFloat(String(facture.acompMont ?? '0').replace(',', '.')) > 0 ||
+                parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) > 0
+            ) {
+                tot.colSpanTot0 += 2;
+            }
         }
         tot.colSpanTot0 += 1; // Colonne Montant TVA
     }
@@ -307,9 +313,9 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
     const coche       = (facture as Record<string, unknown>).cocheImputSoldeClient0 === true;
     const imputAcomp  = String(tot.imputAcomp0 ?? '0');
     const hasAcomp    = imputAcomp === '2' || imputAcomp === '3';
+    // ──────────────────────────────────────────────────────────────
     switch (facture.codeType) {
-        // ──────────────────────────────────────────────────────────────
-        case 10: { // Devis
+        case 10: { // Devis ----------------------
             switch (true) {
                 case (acompTaux === 0 && remTotN === 0): // Sans Acompte et Sans Remise
                     tot.arrTot10      = ['Total TTC', numberToFrStr(facture.totTtc), '1'];
@@ -342,8 +348,7 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
             }
             break;
         }
-        // ──────────────────────────────────────────────────────────────
-        case 20: { // Facture Acompte
+        case 20: { // Facture Acompte -----------------------
             const totRegl = numberToFrStr((facture as Record<string, unknown>).totRegl as number | null);
             tot.arrTot10 = ['Total TTC', totRegl, '1'];
             tot.numLigneGras0 = 0;
@@ -354,8 +359,7 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
             }
             break;
         }
-        // ──────────────────────────────────────────────────────────────
-        case 30: { // Facture
+        case 30: { // Facture ---------------------
             const totBrut  = numberToFrStr((facture as Record<string, unknown>).totBrutTtc0 as number | null);
             const totTtc   = numberToFrStr(facture.totTtc);
             const acompMt  = facture.acompMont ?? '0,00';
@@ -452,8 +456,7 @@ export function traitLibTotaux(facture: Facture, tot: FactureTotauxState): void 
             }
             break;
         }
-        // ──────────────────────────────────────────────────────────────
-        case 40: { // Facture d'Avoir
+        case 40: { // Facture d'Avoir --------------------------
             const totTtc  = numberToFrStr(facture.totTtc);
             const totRegl = numberToFrStr(facture.totRegl);
             const acompMt = facture.acompMont ?? '0,00';

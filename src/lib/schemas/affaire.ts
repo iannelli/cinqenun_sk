@@ -3,25 +3,26 @@ import type { Prisma } from '@prisma/client';
 
 // ─── Sélecteur Prisma ────────────────────────────────────────────
 export const AFFAIRE_SELECT = {
-    id:         true,
-    libAffaire: true,
-    libClient:  true,
-    situation:  true,
-    statutCode: true,
-    statutLib:  true,
-    devis:      true,
-    facValide:  true,
-    suiviFac:   true,
-    montFac:    true,
-    montRegl:   true,
-    montCli:    true,
-    montPena:   true,
-    montSolde:  true,
-    archived:   true,
-    clientId:   true,
-    abonneId:   true,
-    createdAt:  true,
-    updatedAt:  true,
+    id:          true,
+    libAffaire:  true,
+    libClient:   true,
+    situation:   true,
+    statutCode:  true,
+    statutLib:   true,
+    devis:       true,
+    facValide:   true,
+    suiviFac:    true,
+    montFac:     true,
+    montRegl:    true,
+    montCli:     true,
+    imputCreCli: true,
+    montPena:    true,
+    montSolde:   true,
+    archived:    true,
+    clientId:    true,
+    abonneId:    true,
+    createdAt:   true,
+    updatedAt:   true,
 } satisfies Prisma.AffaireSelect;
 
 // ─── Schéma Zod (utilisé par Superforms – formulaire create/update) ──
@@ -36,12 +37,13 @@ export const AffaireFormSchema = z.object({
 // ─── Types ───────────────────────────────────────────────────────
 type AffaireRaw = Prisma.AffaireGetPayload<{ select: typeof AFFAIRE_SELECT }>;
 
-export type Affaire = Omit<AffaireRaw, 'montFac' | 'montRegl' | 'montCli' | 'montPena' | 'montSolde'> & {
-    montFac:   string | null;
-    montRegl:  string | null;
-    montCli:   string | null;
-    montPena:  string | null;
-    montSolde: string | null;
+export type Affaire = Omit<AffaireRaw, 'montFac' | 'montRegl' | 'montCli' | 'imputCreCli' | 'montPena' | 'montSolde'> & {
+    montFac:     string | null;
+    montRegl:    string | null;
+    montCli:     string | null;
+    imputCreCli: string | null;
+    montPena:    string | null;
+    montSolde:   string | null;
 };
 
 export function convertAffaireRawToAffaire(raw: AffaireRaw): Affaire {
@@ -55,11 +57,12 @@ export function convertAffaireRawToAffaire(raw: AffaireRaw): Affaire {
     }
     return {
         ...raw,
-        montFac:   fmt(raw.montFac),
-        montRegl:  fmt(raw.montRegl),
-        montCli:   fmt(raw.montCli),
-        montPena:  fmt(raw.montPena),
-        montSolde: fmt(raw.montSolde),
+        montFac:     fmt(raw.montFac),
+        montRegl:    fmt(raw.montRegl),
+        montCli:     fmt(raw.montCli),
+        imputCreCli: fmt(raw.imputCreCli),
+        montPena:    fmt(raw.montPena),
+        montSolde:   fmt(raw.montSolde),
     };
 }
 

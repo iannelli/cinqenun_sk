@@ -3,6 +3,7 @@ import {type RequestEvent, fail, redirect }        from '@sveltejs/kit';
 import { prisma }                                  from '$lib/server/prisma';
 import { debitCreditClient }                       from '$lib/utils/debitCreditClient';
 import { CLIENT_SELECT, convertClientRawToClient } from '$lib/schemas/client';
+import { recalculerMontantsAffaire }               from '$lib/utils/recalculerMontantsAffaire';
 
 export const actions = {
     // ── Mise à jour du Mode de Règlement d'une Recette ───────────────────────
@@ -97,7 +98,12 @@ export const actions = {
                     },
                 });
             }
-            // ── 4. Mise à jour du Compte Client si excédent ───────────────────
+            // ── 4. Recalcul des montants de l'Affaire ────────────────────
+            const affaireIdRecalc = parseInt(String(fd.get('affaireId')), 10);
+            if (!isNaN(affaireIdRecalc)) {
+                await recalculerMontantsAffaire(affaireIdRecalc, session.userId);
+            }
+            // ── 5. Mise à jour du Compte Client si excédent ───────────────────
             const montCli = String(fd.get('montCli') ?? '0,00');
             if (parseFloat(montCli.replace(',', '.')) > 0) {
                 const clientId = parseInt(String(fd.get('clientId')), 10);

@@ -7,25 +7,39 @@
   
     // ─── 1. PROPS EN PREMIER ─────────────────────────────────────────
     let {
-        facture  = $bindable(null),
-        totaux   = $bindable(createFactureTotauxState()),
+        facture    = $bindable(null),
+        totaux     = $bindable(createFactureTotauxState()),
         totState,
         client,
-        mode     = 'create',
+        mode       = 'create',
         onrefresh, // eslint-disable-line @typescript-eslint/no-unused-vars
+        arrTot10   = $bindable([]),
+        arrTot20   = $bindable([]),
+        arrTot30   = $bindable([]),
+        arrTot40   = $bindable([]),
+        arrTot50   = $bindable([]),
+        nbColonnes = $bindable(1),
+        onTotauxUpdated,
         onImputationConfirmee,
         onDemandeImputation,
     }: {
-        facture:  Facture | null;
-        totaux:   FactureTotauxState;
-        totState: FactureTotauxState;
-        client:   { soldeCredit: number | null } | null;
-        mode:     'create' | 'update';
-        onrefresh: () => void;
+        facture:               Facture | null;
+        totaux:                FactureTotauxState;
+        totState:              FactureTotauxState;
+        client:                { soldeCredit: number | null } | null;
+        mode:                  'create' | 'update';
+        onrefresh:             () => void;
+        arrTot10:              string[];
+        arrTot20:              string[];
+        arrTot30:              string[];
+        arrTot40:              string[];
+        arrTot50:              string[];
+        nbColonnes:            number;
+        onTotauxUpdated:       () => void;
         onImputationConfirmee?: (montant: number) => void;
-        onDemandeImputation?: (message: string, situation: string, onconfirm: () => void) => void;
+        onDemandeImputation?:  (message: string, situation: string, onconfirm: () => void) => void;
     } = $props();
-  
+
     // ─── 2. ÉTATS ────────────────────────────────────────────────────
     let acompTauxInitial      = $state<string | number | null>(null);
     let dateReglInitial       = $state<string | null | undefined>(null);
@@ -36,63 +50,71 @@
     let vuImputSoldeClient0   = $state(false);
     let montantImputerSaisi   = $state<number | string>(0);
     let pendingClose          = $state<(() => void) | null>(null);
-  
-    // ─── 3. EFFECTS : Initialisation au montage ───────────────────────────────────
+
+    // ─── EFFECT : Alimentation de totaux depuis totState ───────────────────────
     $effect(() => {
-        if (!facture) return;
-        if (untrack(() => acompTauxInitial) === null) {
-            acompTauxInitial = facture.acompTaux ?? null;
-            dateReglInitial  = facture.dateRegl  ?? null;
-        }
-        // ← réinitialiser si la facture a changé
-        if (untrack(() => initializedForId) === facture.id) {
-            return;
-        }
-        if (facture.total) {
-            initializedForId = facture.id;   // ← marquer comme initialisé pour cette facture
-            const imputCreCliActuel = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
+        const total     = facture?.total;
+        const factureId = facture?.id;
+        untrack(() => {
+            if (!facture || !total) { totalRows = []; return; }
+            const parsed = parseTotal(total);
+            totalRows = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+            if (acompTauxInitial === null) {
+                acompTauxInitial = facture.acompTaux ?? null;
+                dateReglInitial  = facture.dateRegl  ?? null;
+            }
+            if (initializedForId === factureId) return;
+            initializedForId = factureId ?? null;
             totaux.imputAcomp0     = totState.imputAcomp0;
             totaux.acompMontArray0 = totState.acompMontArray0;
             totaux.acompteId0      = totState.acompteId0;
             totaux.acompPresta0    = totState.acompPresta0;
             totaux.acompVente0     = totState.acompVente0;
+            const imputCreCliActuel = parseFloat(String(facture.imputCreCli ?? '0').replace(',', '.')) || 0;
             if (mode === 'update' && imputCreCliActuel > 0) {
-                // Les données d'imputation sont déjà dans facture.total — NE PAS appeler traitLigneTotal
                 montantImputerSaisi = imputCreCliActuel;
                 facture.imputCreCli = imputCreCliActuel;
                 traitLibTotaux(facture, totaux);
                 traitColSpan(facture, totaux);
                 totaux.colSpanTot0 += 1;
+                onTotauxUpdated();
             } else if (totState.imputAcomp0 === '2' || totState.imputAcomp0 === '3') {
                 traitLigneTotal(facture, totaux);
+                onTotauxUpdated();
             } else {
                 traitLibTotaux(facture, totaux);
                 traitColSpan(facture, totaux);
-            }
-        }
-    });
-    // Lignes de totalisation dérivées de facture.total
-    $effect(() => {
-        if (!facture?.total) { totalRows = []; return; }
-        const parsed = parseTotal(facture.total);
-        totalRows = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-        untrack(() => {// ← untrack pour éviter la boucle réactive
-            if (Number(facture?.imputCreCli ?? 0) === 0) {
-                traitLibTotaux(facture!, totaux);
-                traitColSpan(facture!, totaux);
+                onTotauxUpdated();
             }
         });
     });
-    // Affichage bloc imputation
+
+    // ─── Affichage bloc imputation ────────────────────────────────────────────────
     $effect(() => {
         if (!facture || !client) { vuImputSoldeClient0 = false; return; }
         const soldeCredit = parseFloat(String(client.soldeCredit ?? '0').replace(',', '.')) || 0;
-        if (totState.imputAcomp0 !== '2' && totState.imputAcomp0 !== '3' && facture.codeType == 30 && facture.refFac?.slice(0, 2) == 'FB' && soldeCredit > 0) {
+        if (totState.imputAcomp0 !== '2' && totState.imputAcomp0 !== '3' 
+            && facture.codeType == 30 
+            && facture.refFac?.slice(0, 2) == 'FB' 
+            && soldeCredit > 0) {
             vuImputSoldeClient0 = true;
         } else {
             vuImputSoldeClient0 = false;
         }
     });
+
+    // Fonctions relatives à l'Affichage (en cas d'imposition à la Tva) de la table de Totalisation des Imputation d'Acompte ou d'Excédent d'Encaissement : Entête et ligne de totalisation
+    const estDevisOuAcompte = $derived(
+        facture?.codeType === 10 ||
+        (facture?.codeType === 30 && parseFloat(String(facture?.acompMont ?? '0').replace(',', '.')) > 0 && !!facture?.refDevis)
+    );
+    const estImputationCredit = $derived(
+        facture?.codeType === 30 && parseFloat(String(facture?.imputCreCli ?? '0').replace(',', '.')) > 0
+    );
+    const titreColonneAcompteImputation = $derived(
+        estDevisOuAcompte ? 'Acompte HT' : 'Imputation HT'
+    );
+
     // ─── 4. FONCTIONS ────────────────────────────────────────────────
     function saisieAcompte(e: Event) {
         if (!facture) return;
@@ -159,6 +181,7 @@
         }
         onImputationConfirmee?.(Number(montantImputerSaisi) || 0);
         imputSituation = null;
+        onTotauxUpdated();  // ← ajouter ici
     }
     function hasUnsavedChanges(): boolean {
         if (!facture) return false;
@@ -175,7 +198,7 @@
         }
     }
     export { hasUnsavedChanges, confirmCloseTotaux };
-  
+
     function fmt2fr(v: number): string { return v.toFixed(2).replace('.', ','); }
     function calculerImputationDansTotal(montantImputation: number): void {
         if (!facture) return;
@@ -186,15 +209,27 @@
                 ? rawTotal
                 : [rawTotal];
         const lignesTva = arr.filter(r => ['00', '11', '14'].includes(String(r.typeTotalisation0 ?? '').slice(4, 6)));
-        const montantTotalHT = lignesTva.reduce((sum, r) => sum + (parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0), 0);
-        if (montantTotalHT > 0) {
+
+        // ← Base de répartition en TTC (et non en HT)
+        const montantTotalTTC = lignesTva.reduce((sum, r) => {
+            const montBrut = parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0;
+            const tauxTva  = parseFloat(String(r.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) || 0;
+            return sum + montBrut * (1 + tauxTva / 100);
+        }, 0);
+        if (montantTotalTTC > 0) {
             if (montantImputation > 0) {
                 for (const r of lignesTva) {
-                    const montBrut       = parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0;
-                    const tauxTva        = parseFloat(String(r.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) || 0;
-                    const acompte        = (montantImputation * (montBrut / montantTotalHT)) / (1 + tauxTva / 100);
-                    const montHt         = montBrut - acompte;
-                    const montTva        = (montHt * tauxTva) / 100;
+                    const montBrut  = parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0;
+                    const tauxTva   = parseFloat(String(r.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) || 0;
+                    const montTtcLigne = montBrut * (1 + tauxTva / 100);
+
+                    // ← Répartition proportionnelle au TTC
+                    const imputTtc  = montantImputation * (montTtcLigne / montantTotalTTC);
+                    // ← Conversion de l'imputation TTC en HT
+                    const acompte   = imputTtc / (1 + tauxTva / 100);
+                    const montHt    = montBrut - acompte;
+                    const montTva   = (montHt * tauxTva) / 100;
+
                     r.acompteImputation0 = fmt2fr(acompte);
                     r.montHt0            = fmt2fr(montHt);
                     r.montTva0           = fmt2fr(montTva);
@@ -202,8 +237,8 @@
                 }
             } else {
                 for (const r of lignesTva) {
-                    const montBrut       = parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0;
-                    const tauxTva        = parseFloat(String(r.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) || 0;
+                    const montBrut  = parseFloat(String(r.montBrut0 ?? '0').replace(',', '.')) || 0;
+                    const tauxTva   = parseFloat(String(r.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) || 0;
                     r.acompteImputation0 = '';
                     r.montHt0            = fmt2fr(montBrut);
                     r.montTva0           = fmt2fr((montBrut * tauxTva) / 100);
@@ -211,18 +246,8 @@
                 }
             }
         }
-      facture.total = serializeTotal(arr);
+        facture.total = serializeTotal(arr);
     }
-    // ─── Calcul du Nombre de Colonnes ───────────────────────────────
-    const nbColonnes = $derived.by(() => {
-        let nb = 1; // Totalisation toujours présente
-        if (facture?.regimeTva == 'B') nb++;
-        if ((facture?.codeType == 10 && Number(facture?.acompTaux) > 0 && facture?.regimeTva == 'B') || totaux.imputAcomp0 == '3'  || (facture?.regimeTva == 'B' && Number(facture?.imputCreCli) > 0)) nb++; // Imputation HT
-        if ((facture?.codeType == 10 && Number(facture?.acompTaux) > 0 && facture?.regimeTva == 'B') || totaux.imputAcomp0 == '3' || (facture?.regimeTva == 'B' && Number(facture?.imputCreCli) > 0)) nb++; // Net HT
-        if (facture?.regimeTva == 'B') nb++;
-        nb++; // Total Ttc
-        return nb;
-    });
     function creditClientAffiche(): number {
         const solde = parseFloat(String(client?.soldeCredit ?? '0').replace(',', '.')) || 0;
         if (mode === 'update' && Number(montantImputerSaisi) === 0) {
@@ -278,10 +303,10 @@
                     {#if facture.regimeTva == 'B'}
                         <th style="width:13%">Brut HT</th>
                     {/if}
-                    {#if (facture.codeType == 10 && Number(facture.acompTaux) > 0 && facture.regimeTva == 'B') || totaux.imputAcomp0 == '3'|| (facture.regimeTva == 'B' && Number(facture.imputCreCli) > 0)}
-                        <th style="width:11%">Imputation HT</th>
+                    {#if (estDevisOuAcompte || estImputationCredit) && facture.regimeTva == 'B'}
+                        <th style="width:11%">{titreColonneAcompteImputation}</th>
                     {/if}
-                    {#if (facture.codeType == 10 && Number(facture.acompTaux) > 0 && facture.regimeTva == 'B') || totaux.imputAcomp0 == '3'|| (facture.regimeTva == 'B' && Number(facture.imputCreCli) > 0)}
+                    {#if (estDevisOuAcompte || estImputationCredit) && facture.regimeTva == 'B'}
                         <th style="width:13%">Net HT</th>
                     {/if}
                     {#if facture.regimeTva == 'B'}
@@ -299,17 +324,17 @@
                             {#if facture.regimeTva == 'B'}
                                 <td>{total.montBrut0}</td>
                             {/if}
-                            {#if (facture.codeType == 10 && Number(facture.acompTaux) > 0 && facture.regimeTva == 'B') || totaux.imputAcomp0 == '3' || (facture.regimeTva == 'B' && Number(facture.imputCreCli) > 0)}
+                            {#if (estDevisOuAcompte || estImputationCredit) && facture.regimeTva == 'B'}
                                 <td>{total.acompteImputation0}</td>
                             {/if}
-                            {#if (facture.codeType == 10 && Number(facture.acompTaux) > 0 && facture.regimeTva == 'B') || totaux.imputAcomp0 == '3' || (facture.regimeTva == 'B' && Number(facture.imputCreCli) > 0)}
+                            {#if (estDevisOuAcompte || estImputationCredit) && facture.regimeTva == 'B'}
                                 <td>{total.montHt0}</td>
                             {/if}
                             {#if facture.regimeTva == 'B'}
                                 <td style="white-space:nowrap">{total.montTva0}
-                                    {#if Number(facture.imputCreCli) > 0 && parseFloat(String(total.acompteImputation0 ?? '0').replace(',','.')) > 0}
-                                        <br><small><em style="color:#666;font-size:10px;white-space:nowrap">Tva/Imputation&nbsp;:&nbsp;{(
-                                            parseFloat(String(total.acompteImputation0).replace(',','.')) * parseFloat(String(total.typeTotalisation0 ?? '').slice(0,4).replace(',','.')) / 100).toFixed(2).replace('.',',')}
+                                    {#if (estDevisOuAcompte || estImputationCredit) && parseFloat(String(total.acompteImputation0 ?? '0').replace(',', '.')) > 0}
+                                        <br><small><em style="color:#666;font-size:10px;white-space:nowrap">
+                                            {estDevisOuAcompte ? 'Tva/Acompte' : 'Tva/Imputation'}&nbsp;:&nbsp;{(parseFloat(String(total.acompteImputation0).replace(',', '.')) * parseFloat(String(total.typeTotalisation0 ?? '').slice(0, 4).replace(',', '.')) / 100 ).toFixed(2).replace('.', ',')}
                                         </em></small>
                                     {/if}
                                 </td>
@@ -317,40 +342,37 @@
                             <td>{total.montTtc0}</td>
                         </tr>
                     {/each}
+                    <!--  Lignes de Total Final  -->
                     <tr style="height:10px"></tr>
-                    <!-- ── Lignes "Totaux" finales dans la table ──────────────────── -->
-                    {#if facture.totTtc != null && totaux.arrTot10.length > 0}
-                        <tr style="height:5px"></tr>
-                        {#if totaux.arrTot10.length > 0}
-                            <tr>
-                                <td colspan={nbColonnes-1} style="text-align:right;border:none" class={totaux.arrTot10[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot10[0]}</td>
-                                <td style="text-align:center;border:none" class={totaux.arrTot10[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot10[1]}</td>
-                            </tr>
-                        {/if}
-                        {#if totaux.arrTot20.length > 0}
-                            <tr>
-                                <td colspan={nbColonnes-1} style="text-align:right;border:none" class={totaux.arrTot20[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot20[0]}</td>
-                                <td style="text-align:center;border:none" class={totaux.arrTot20[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot20[1]}</td>
-                            </tr>
-                        {/if}
-                        {#if totaux.arrTot30.length > 0}
-                            <tr>
-                                <td colspan={nbColonnes-1} style="text-align:right;border:none" class={totaux.arrTot30[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot30[0]}</td>
-                                <td style="text-align:center;border:none" class={totaux.arrTot30[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot30[1]}</td>
-                            </tr>
-                        {/if}
-                        {#if totaux.arrTot40.length > 0}
-                            <tr>
-                                <td colspan={nbColonnes-1} style="text-align:right;border:none" class={totaux.arrTot40[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot40[0]}</td>
-                                <td style="text-align:center;border:none" class={totaux.arrTot40[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot40[1]}</td>
-                            </tr>
-                        {/if}
-                        {#if totaux.arrTot50.length > 0}
-                            <tr>
-                                <td colspan={nbColonnes-1} style="text-align:right;border:none" class={totaux.arrTot50[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot50[0]}</td>
-                                <td style="text-align:center;border:none" class={totaux.arrTot50[2] == '0' ? "tdNoBold" : "tdBold"}>{totaux.arrTot50[1]}</td>
-                            </tr>
-                        {/if}
+                    {#if arrTot10[0] != null && arrTot10[0] !== ''}
+                        <tr>
+                            <td colspan={nbColonnes-1} style="text-align:right;border:none" class={arrTot10[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot10[0]}</td>
+                            <td style="text-align:center;border:none" class={arrTot10[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot10[1]}</td>
+                        </tr>
+                    {/if}
+                    {#if arrTot20[0] != null && arrTot20[0] !== ''}
+                        <tr>
+                            <td colspan={nbColonnes-1} style="text-align:right;border:none" class={arrTot20[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot20[0]}</td>
+                            <td style="text-align:center;border:none" class={arrTot20[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot20[1]}</td>
+                        </tr>
+                    {/if}
+                    {#if arrTot30[0] != null && arrTot30[0] !== ''}
+                        <tr>
+                            <td colspan={nbColonnes-1} style="text-align:right;border:none" class={arrTot30[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot30[0]}</td>
+                            <td style="text-align:center;border:none" class={arrTot30[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot30[1]}</td>
+                        </tr>
+                    {/if}
+                    {#if arrTot40[0] != null && arrTot40[0] !== ''}
+                        <tr>
+                            <td colspan={nbColonnes-1} style="text-align:right;border:none" class={arrTot40[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot40[0]}</td>
+                            <td style="text-align:center;border:none" class={arrTot40[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot40[1]}</td>
+                        </tr>
+                    {/if}
+                    {#if arrTot50[0] != null && arrTot50[0] !== ''}
+                        <tr>
+                            <td colspan={nbColonnes-1} style="text-align:right;border:none" class={arrTot50[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot50[0]}</td>
+                            <td style="text-align:center;border:none" class={arrTot50[2] == '0' ? 'tdNoBold' : 'tdBold'}>{arrTot50[1]}</td>
+                        </tr>
                     {/if}
                 {/if}
             </tbody>

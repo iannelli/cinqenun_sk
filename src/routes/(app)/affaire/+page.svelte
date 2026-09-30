@@ -8,8 +8,9 @@
     import { parseNbrMontAffaire, type Abonne }                 from '$lib/schemas/abonne';
     import { type Affaire, AffaireFormSchema }                  from '$lib/schemas/affaire';
     import { checkFacturesValideesFetch, prepareUpdateAffaire } from '$lib/components/affaire/AffairePage.utils';
-    import ModalConfirm from '$lib/components/ModalConfirm.svelte';
-    import ModalAlerte  from '$lib/components/ModalAlerte.svelte';
+    import ModalConfirm      from '$lib/components/ModalConfirm.svelte';
+    import ModalAlerte       from '$lib/components/ModalAlerte.svelte';
+    import { formatMontant } from '$lib/utils/format';
 
     let mounted = $state(false);
     onMount(() => {
@@ -131,6 +132,14 @@
         ongletCourant0 = onglet;
     }
 
+    // ─── Liste des Affaires ──────────────────────────────────────
+    const hasImputCreCli = $derived(
+        affairesFiltrees.some(a => parseFloat(String(a.imputCreCli ?? '0').replace(',', '.')) > 0)
+    );
+    const hasExcedent = $derived(
+        affairesFiltrees.some(a => parseFloat(String(a.montCli ?? '0').replace(',', '.')) > 0)
+    );
+
     // ─── État ────────────────────────────────────────────────────
     let affaireDialog        = $state<HTMLDialogElement | null>(null);
     let confirmDeleteVisible = $state(false);
@@ -233,15 +242,24 @@
                         <th>Date Création</th>
                         <th>Client</th>
                         <th>Etat d'Avancement</th>
-                        <th>Montant Facturé</th>
-                        <th>Montant Réglé</th>
-                        <th>Solde</th>
+                        <th class="col-montant">Montant TTC</th>
+                        {#if hasImputCreCli}
+                            <th class="col-montant">Crédit Client</th>
+                            <th class="col-montant">Montant Dû</th>
+                        {/if}
+                        <th class="col-montant">Montant Réglé</th>
+                        {#if hasExcedent}
+                            <th class="col-montant">Excédent</th>
+                        {/if}
+                        <th class="col-montant">Solde</th>
                         <th class="sg-thOverlay"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {#if affairesFiltrees.length === 0}
-                        <tr class="sg-trSha"><td colspan="8" class="empty-state">Aucune affaire trouvée.</td></tr>
+                        <tr class="sg-trSha">
+                            <td colspan={hasImputCreCli ? 10 : 8} class="empty-state">Aucune affaire trouvée.</td>
+                        </tr>
                     {:else}
                         {#each affairesFiltrees as affaire (affaire.id)}
                             <tr class="sg-trSha {hoveredAffaire?.id === affaire.id ? 'sg-trSha--hovered' : ''}" style="cursor:pointer" onmouseenter={(e)=>{clearTimeout(hideTimer);onRowEnter(e, affaire)}}
@@ -252,7 +270,20 @@
                                 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                                 <td>{@html affaire.statutLib}</td>
                                 <td class="col-montant">{affaire.montFac}</td>
+                                {#if hasImputCreCli}
+                                    <td class="col-montant">
+                                        {parseFloat(String(affaire.imputCreCli ?? '0').replace(',', '.')) > 0 ? '- ' + formatMontant(affaire.imputCreCli) : ''}
+                                    </td>
+                                    <td class="col-montant">
+                                        {parseFloat(String(affaire.imputCreCli ?? '0').replace(',', '.')) > 0  ? formatMontant(parseFloat(String(affaire.montFac ?? '0').replace(',', '.')) - parseFloat(String(affaire.imputCreCli ?? '0').replace(',', '.'))) : ''}
+                                    </td>
+                                {/if}
                                 <td class="col-montant">{affaire.montRegl}</td>
+                                {#if hasExcedent}
+                                    <td class="col-montant">
+                                        {parseFloat(String(affaire.montCli ?? '0').replace(',', '.')) > 0 ? formatMontant(affaire.montCli) : ''}
+                                    </td>
+                                {/if}
                                 <td class="col-montant">{affaire.montSolde}</td>
                             </tr>
                         {/each}

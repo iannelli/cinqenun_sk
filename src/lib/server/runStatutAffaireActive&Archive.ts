@@ -56,20 +56,25 @@ export async function updateSuiviFacAbonne(
 
 async function updateNbrMontAffaireComplet(abonneId: number, affaireId: number, situationAvant: string | null, montSoldAvant: number): Promise<void> {
     const situationIndexMap: Record<string, number> = { '00x':0, '10x':1, '20x':2, '30x':4, '11a':6, '11b':8, '31a':10, '31b':12 };
+    const situationsSansMontant = new Set([0, 1]); // '00x' et '10x'
     const abonneNbr    = await prisma.abonne.findUniqueOrThrow({ where: { id: abonneId }, select: { nbrMontAffaire: true } });
     const nbrMontArray = parseNbrMontAffaire(abonneNbr.nbrMontAffaire);
-    const indAvant     = situationIndexMap[situationAvant ?? ''];
+    const indAvant = situationIndexMap[situationAvant ?? ''];
     if (indAvant !== undefined) {
-        nbrMontArray[indAvant]     = Math.max(0, nbrMontArray[indAvant] - 1);
-        nbrMontArray[indAvant + 1] = Math.max(0, nbrMontArray[indAvant + 1] - montSoldAvant);
+        nbrMontArray[indAvant] = Math.max(0, nbrMontArray[indAvant] - 1);
+        if (!situationsSansMontant.has(indAvant)) {
+            nbrMontArray[indAvant + 1] = Math.max(0, nbrMontArray[indAvant + 1] - montSoldAvant);
+        }
     }
     const nouvelleAffaire   = await prisma.affaire.findUniqueOrThrow({ where: { id: affaireId }, select: { situation: true, montSolde: true } });
     const nouvelleSituation = nouvelleAffaire.situation ?? '';
     const nouvMontSolde     = parseFloat(String(nouvelleAffaire.montSolde ?? '0').replace(',', '.')) || 0;
-    const indApres          = situationIndexMap[nouvelleSituation];
+    const indApres = situationIndexMap[nouvelleSituation];
     if (indApres !== undefined) {
-        nbrMontArray[indApres]     = nbrMontArray[indApres] + 1;
-        nbrMontArray[indApres + 1] = nbrMontArray[indApres + 1] + nouvMontSolde;
+        nbrMontArray[indApres] = nbrMontArray[indApres] + 1;
+        if (!situationsSansMontant.has(indApres)) {
+            nbrMontArray[indApres + 1] = nbrMontArray[indApres + 1] + nouvMontSolde;
+        }
     }
     await prisma.abonne.update({ where: { id: abonneId }, data: { nbrMontAffaire: buildNbrMontAffaire(nbrMontArray) } });
 }
@@ -108,7 +113,7 @@ export async function runStatutAffairesToutes(userId: number): Promise<void> {
     }
 }
 
-// ── Traitempent des Affaire Actives ──────────────────────────────────────────────────────────────────
+// ── Traitement des Affaire Actives ──────────────────────────────────────────────────────────────────
 export async function runStatutAffaireActive(
     session:        { userId: number },
     abonne:         Abonne,  // ← paramètre ajouté

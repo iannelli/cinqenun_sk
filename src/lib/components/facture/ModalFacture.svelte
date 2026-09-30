@@ -53,11 +53,64 @@
     } = $props();
 
     let messageEnregistrement = $state('');
-    let totaux                = $state(createFactureTotauxState());
     let factureTotauxRef      = $state<ReturnType<typeof FactureTotaux> | null>(null);
     let enregistrement        = $state(false);
     let factureEnregistree    = $state(false);
     let factureModifiee       = $state(false);
+
+    // Ces variables réactives sont mises à jour après chaque appel à traitLibTotaux
+    let arrTot10 = $state<string[]>([]);
+    let arrTot20 = $state<string[]>([]);
+    let arrTot30 = $state<string[]>([]);
+    let arrTot40 = $state<string[]>([]);
+    let arrTot50 = $state<string[]>([]);
+    // Réactivité automatique sur totauxLocal
+    $effect(() => {
+        if (!facture?.total) return;
+        const snap = $state.snapshot(totauxLocal.arrTot10);
+        console.log('[ModalFacture $effect] snap:', snap);
+        if ((snap as string[]).length > 0) {
+            arrTot10 = snap as string[];
+            arrTot20 = $state.snapshot(totauxLocal.arrTot20) as string[];
+            arrTot30 = $state.snapshot(totauxLocal.arrTot30) as string[];
+            arrTot40 = $state.snapshot(totauxLocal.arrTot40) as string[];
+            arrTot50 = $state.snapshot(totauxLocal.arrTot50) as string[];
+            // Recalculer nbColonnes
+            const regimeTva           = facture?.regimeTva;
+            const codeType            = facture?.codeType;
+            const imputCreCli         = Number(facture?.imputCreCli);
+            const estDevisOuAcompte   = codeType === 10 || (codeType === 30 && !!facture?.refDevis);
+            const estImputationCredit = codeType === 30 && imputCreCli > 0;
+            let nb = 1;
+            if (regimeTva == 'B') nb++;
+            if ((estDevisOuAcompte || estImputationCredit) && regimeTva == 'B') nb++;
+            if ((estDevisOuAcompte || estImputationCredit) && regimeTva == 'B') nb++;
+            if (regimeTva == 'B') nb++;
+            nb++;
+            nbColonnes = nb;
+        }
+    });
+    // Fonction callback appelée par FactureTotaux après chaque traitLibTotaux
+    let nbColonnes = $state(1);
+    function onTotauxUpdated() {
+        arrTot10 = $state.snapshot(totauxLocal.arrTot10) as string[];
+        arrTot20 = $state.snapshot(totauxLocal.arrTot20) as string[];
+        arrTot30 = $state.snapshot(totauxLocal.arrTot30) as string[];
+        arrTot40 = $state.snapshot(totauxLocal.arrTot40) as string[];
+        arrTot50 = $state.snapshot(totauxLocal.arrTot50) as string[];
+        const regimeTva           = facture?.regimeTva;
+        const codeType            = facture?.codeType;
+        const imputCreCli         = Number(facture?.imputCreCli);
+        const estDevisOuAcompte   = codeType === 10 || (codeType === 30 && !!facture?.refDevis);
+        const estImputationCredit = codeType === 30 && imputCreCli > 0;
+        let nb = 1;
+        if (regimeTva == 'B') nb++;
+        if ((estDevisOuAcompte || estImputationCredit) && regimeTva == 'B') nb++;
+        if ((estDevisOuAcompte || estImputationCredit) && regimeTva == 'B') nb++;
+        if (regimeTva == 'B') nb++;
+        nb++;
+        nbColonnes = nb;
+    }
 
      // ─── Bandeau résultat enregistrement ────────────────────────────
     let bandeauVisible = $state(false);
@@ -286,11 +339,12 @@
     <p style="margin-top:20px"></p>
     <FactureEntete bind:facture {affaire} {affaireId} {clients} {action} {onrefresh} bind:dateEcheanceDate0 {devisOptions} {factures} onAbandonner={()=>{onclose()}} onModification={() => factureModifiee = true}/>
     <p style="margin-top:30px"></p>
-    <FactureLignes bind:facture bind:totaux {tarifs} {dateEcheanceDate0} {onrefresh} onModification={() => factureModifiee = true}/>
+    <FactureLignes bind:facture bind:totaux={totauxLocal} {tarifs} {dateEcheanceDate0} {onrefresh} {onTotauxUpdated}/>
     <p style="margin-top:30px"></p>
-    <FactureTotaux bind:facture bind:totaux={totauxLocal} {totState} {client} {mode} {onrefresh}
-                   onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant; if(facture) facture.imputCreCli=montant}}
-                   onDemandeImputation={(msg, _sit, fn) => {confirmImputMessage=msg;pendingImputation=fn;confirmImputVisible=true}}/>
+    <FactureTotaux bind:facture bind:totaux={totauxLocal} {totState} {client} {mode} {onrefresh} bind:arrTot10 bind:arrTot20 bind:arrTot30 bind:arrTot40 bind:arrTot50 bind:nbColonnes
+        {onTotauxUpdated} onImputationConfirmee={(montant)=>{montantImputerSaisiValeur=montant; if(facture) facture.imputCreCli=montant}}
+        onDemandeImputation={(msg, _sit, fn)=>{confirmImputMessage=msg;pendingImputation=fn;confirmImputVisible=true}}
+    />
     <ModalConfirm bind:visible={confirmImputVisible} titre="Imputation du Crédit Client" message={confirmImputMessage} labelConfirm="Confirmer" labelAnnuler="Annuler"
                   onconfirm={()=>{confirmImputVisible=false;pendingImputation?.();pendingImputation=null}} onannuler={()=>{confirmImputVisible=false;pendingImputation=null}} />
     <div class="divButton0">

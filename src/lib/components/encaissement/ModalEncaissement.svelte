@@ -605,13 +605,13 @@
             </div>
         {:else} <!--  Liste des Encaissements  -->
             <div class="divRecette" style="width:100%">
-                <div style="position:relative;display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:13px;margin:0 3px;opacity:0.8">
+                <div style="position:relative;display:flex;flex-direction:row;align-items:center;color:#60A2F2;font-size:14px;font-weight:600;margin:0 3px;opacity:0.8">
                     <hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-right:5px"/>Liste des Encaissements<hr style="flex:1;border:none;border-top:1px solid #60A2F2;opacity:0.5;margin-left:5px"/>
                     {#if (facture.codeType == 10 && facture.acompMont != '0,00') || (facture.codeType == 30 && (facture.soldeStr != '0,00' || facture.montCliStr != '0,00')) || (facture.codeType == 40 && facture.montCliStr != '0,00')}
-                        <button type="button" class="sg-link" style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-weight:600;white-space:nowrap;background:white;padding:0 6px;margin-top:-5px; margin-right:10px" onclick={()=>initRecette()}>+ Saisir un Nouvel Encaissement</button>
+                        <button class="btn-donnees-gen" onclick={()=>initRecette()}>+ Saisir un Nouvel Encaissement</button>
                     {/if}
                 </div>
-                <table id="tableRecette" class="tableRecette">
+                <table id="tableRecette" class="tableRecette" style="margin-top:5px">
                     <thead>
                         <tr style="height:30px">
                             <th style="width:30%">Date</th>
@@ -690,6 +690,39 @@
     .tableEntete td {
         opacity: 1;
         font-size: 16px;
+    }
+    .btn-donnees-gen {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        height: 25px;
+        max-height: 25px;
+        line-height: 1;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+        background: white;
+        color: #60A2F2;
+        border: 1px solid #60A2F2;
+        border-radius: 12px;
+        padding: 0 12px;
+        margin-top: -1px;
+        margin-right: 20px;
+        cursor: pointer;
+        text-decoration: none;
+        box-shadow: 2px 2px 4px rgba(0,0,0,0.25);
+        transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .btn-donnees-gen:hover {
+        background: #60A2F2;
+        color: white;
+        text-decoration: none;
+        box-shadow: 3px 3px 6px rgba(0,0,0,0.3);
     }
     /* Div de Saisie d'une Ligne d'Encaissement' --------- */
     .divSaisieEncais { /* , .divSaisieCour  !!!!!!!!!!!!!!!!!!!!!!!!  */
